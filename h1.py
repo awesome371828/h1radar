@@ -438,7 +438,14 @@ async def auth_poll(nonce:str):
 
 @app.get("/api/me")
 async def me(authorization:str|None=Header(default=None)):
- r=await current_user(authorization); return {"user":user_json(r)}
+ r=await current_user(authorization)
+ stats=await pool.fetchrow("""SELECT
+  (SELECT count(*) FROM reports WHERE author_id=$1) AS reports_total,
+  (SELECT count(*) FROM reports WHERE author_id=$1 AND status='published') AS reports_published,
+  (SELECT count(*) FROM report_confirmations WHERE telegram_id=$1) AS confirmations_given,
+  (SELECT count(*) FROM city_chat_messages WHERE telegram_id=$1) AS chat_messages
+ """,r["telegram_id"])
+ return {"user":user_json(r),"stats":{k:int(stats[k] or 0) for k in ("reports_total","reports_published","confirmations_given","chat_messages")}}
 
 @app.get("/api/cities")
 async def cities():
