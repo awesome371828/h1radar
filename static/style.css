@@ -219,3 +219,10 @@ body.side-collapsed .maptools{left:18px}
 @keyframes signalBeat{0%,100%{box-shadow:0 0 0 0 #63dfd033,0 0 10px #63dfd066}50%{box-shadow:0 0 0 7px #63dfd000,0 0 18px #63dfd099}}
 @keyframes reportFloat{0%,100%{box-shadow:0 12px 36px #54c9c344}50%{box-shadow:0 16px 44px #54c9c366}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+
+.city-request-btn{width:100%;margin:7px 0 11px;padding:10px 12px;border:1px dashed #79d9d077;border-radius:12px;background:#63dfd00d;color:#aaf0e3;font:700 11px Inter;cursor:pointer;transition:background .2s,border-color .2s}
+.city-request-btn:hover{background:#63dfd01c;border-color:#79d9d0}
+.side label{display:block;color:#a9c4d8;font-size:11px;margin:9px 0}.side label input{display:block;width:100%;margin-top:5px;padding:11px;border:1px solid #8eb8dc35;border-radius:10px;background:#061426c9;color:#eaf4ff}
+.directory-actions{display:flex;align-items:center;gap:10px}.directory-actions input{min-width:0;flex:1}.directory-actions button{flex:0 0 auto;padding:10px 12px;border:1px solid #72d9d044;border-radius:10px;background:#63dfd00e;color:#a8eee2;font:700 10px Manrope;cursor:pointer}.city-list[hidden]{display:none!important}
+.moscow-home{font:700 10px 'DM Mono';color:#86e7d9;white-space:nowrap}
+@media(max-width:650px){.directory-actions{align-items:stretch;flex-direction:column}.directory-actions button{align-self:flex-start}.moscow-home{display:none}}
