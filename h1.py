@@ -651,7 +651,7 @@ async def assign_city_moderator(body:dict,authorization:str|None=Header(default=
  code=str(body.get("code","")).strip().upper()
  city=str(body.get("city","")).strip()
  requested=body.get("permissions")
- allowed=PERMISSIONS-{"ambassador"}
+ allowed=PERMISSIONS
  if not code or not city or not isinstance(requested,list) or not requested:
   raise HTTPException(400,"Укажи код жителя, город и хотя бы одно право.")
  if any(not isinstance(x,str) or x not in allowed for x in requested):
@@ -675,6 +675,23 @@ async def assign_city_moderator(body:dict,authorization:str|None=Header(default=
   except Exception: log.warning("Could not notify newly assigned moderator %s",target["telegram_id"],exc_info=True)
  return {"ok":True,"telegram_id":target["telegram_id"],"city":city_row["name"],"permissions":sorted(set(requested))}
 
+@app.delete("/api/moderation/assignments/{telegram_id}/{city_id}/{permission}")
+async def revoke_city_permission(telegram_id:int,city_id:int,permission:str,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Изменять права команды может только владелец.")
+ if permission not in PERMISSIONS: raise HTTPException(400,"Неизвестное право.")
+ async with pool.acquire() as c:
+  async with c.transaction():
+   result=await c.execute("DELETE FROM moderator_city_permissions WHERE telegram_id=$1 AND city_id=$2 AND permission=$3",telegram_id,city_id,permission)
+   if result.endswith("0"): raise HTTPException(404,"Такое назначение не найдено.")
+   left=await c.fetchval("SELECT count(*) FROM moderator_city_permissions WHERE telegram_id=$1",telegram_id)
+   if not left: await c.execute("UPDATE users SET role='user' WHERE telegram_id=$1 AND telegram_id<>$2",telegram_id,BOT_OWNER)
+   await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'city_permission_revoked',$2,$3)",actor["telegram_id"],telegram_id,permission)
+ if bot:
+  try: await bot.send_message(telegram_id,"ℹ️ Одно из прав команды H1 RADAR было снято.")
+  except Exception: log.warning("Could not notify permission revocation",exc_info=True)
+ return {"ok":True,"remaining_permissions":int(left or 0)}
+
 @app.get("/api/moderation/summary")
 async def mod_summary(authorization:str|None=Header(default=None)):
  await moderator(authorization,"statistics")
@@ -685,7 +702,7 @@ async def mod_summary(authorization:str|None=Header(default=None)):
 @app.get("/api/moderation/reports")
 async def mod_reports(authorization:str|None=Header(default=None)):
  await moderator(authorization,"events")
- rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.created_at,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='pending' ORDER BY r.created_at LIMIT 100")
+ rows=await pool.fetch("""SELECT r.id,r.city,r.category,r.description,r.created_at,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='pending' AND ($1 OR EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$2 AND p.permission='events' AND c.name=r.city)) ORDER BY r.created_at LIMIT 100""", (await current_user(authorization))["role"]=="owner", (await current_user(authorization))["telegram_id"])
  return {"items":[{**feed_json(r),"author_code":r["public_code"]} for r in rows]}
 
 @app.get("/api/moderation/events")
