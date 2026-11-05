@@ -157,5 +157,46 @@ class MandatorySignInTests(unittest.TestCase):
         self.assertTrue((root / "static" / "h1-avatar.svg").exists())
 
 
+class CityModeratorPermissionTests(unittest.TestCase):
+    def test_city_scoped_permission_schema_and_routes(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS moderator_city_permissions", h1.SCHEMA)
+        self.assertIn("one_city_ambassador_idx", h1.SCHEMA)
+        paths = {route.path for route in h1.app.routes}
+        self.assertIn("/api/moderation/assignments", paths)
+        self.assertIn("/api/moderation/assignments/{telegram_id}/{city_id}/{permission}", paths)
+
+    def test_permissions_are_checked_per_city(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] / "h1.py").read_text(encoding="utf-8")
+        self.assertIn("async def require_permission", source)
+        self.assertIn("async def assign_city_moderator", source)
+        self.assertIn("async def revoke_city_permission", source)
+        self.assertIn("WHERE p.telegram_id=$1 AND p.permission=$2 AND c.name=$3", source)
+
+    def test_unconfirmed_reports_expire_after_five_minutes(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] / "h1.py").read_text(encoding="utf-8")
+        self.assertIn("created_at<now()-interval '5 minutes'", source)
+        self.assertIn("created_at>=now()-interval '5 minutes'", source)
+
+    def test_map_feed_includes_public_author_code(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] / "h1.py").read_text(encoding="utf-8")
+        frontend = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("u.public_code FROM reports r LEFT JOIN users u", source)
+        self.assertIn("item-author", frontend)
+        self.assertIn("author:x.author_code", frontend)
+
+    def test_owner_assignment_interface_has_minimal_permission_controls(self):
+        from pathlib import Path
+        html = (Path(__file__).resolve().parents[1] / "static" / "moderation.html").read_text(encoding="utf-8")
+        self.assertIn('id="assignBtn"', html)
+        self.assertIn('id="assignCity"', html)
+        self.assertIn('id="assignCode"', html)
+        self.assertIn('value="ambassador"', html)
+        self.assertIn('value="support"', html)
+        self.assertIn('Разбор ПВО — недоступно', html)
+
+
 if __name__ == "__main__":
     unittest.main()
