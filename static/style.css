@@ -160,3 +160,4 @@ main{height:100dvh;min-height:0;display:block;padding:0}
 .popup-confirm{display:block;margin-top:9px;padding:8px 12px;border:1px solid #8abbe655;border-radius:10px;background:#183d60;color:#e9f5ff;font:600 11px Inter;cursor:pointer}
 .popup-confirm:disabled{opacity:.5;cursor:wait}
 \n/* H1 report flow: pick a point on the map; subtle live marker shimmer */\n.map-report{right:calc(318px + 32px);bottom:20px;min-width:138px;letter-spacing:.01em}\n.report-types button{min-height:46px;transition:background .16s,border-color .16s,transform .16s}.report-types button:active{transform:scale(.985)}\n#map canvas{cursor:grab}#map canvas:active{cursor:grabbing}\n@media(max-width:760px){.map-report{right:calc(min(270px,43vw) + 18px);bottom:15px}}\n@media(max-width:480px){.map-report{right:calc(45vw + 14px)}}\n
+.map-actions{display:none!important}
