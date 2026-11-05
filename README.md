@@ -32,8 +32,8 @@ or build the included Dockerfile.
 
 ## API
 - `GET /api/health`, `GET /api/cities`, `GET /api/feed`, `GET /api/city-chat`, `POST /api/city-chat`
-- Authenticated: `GET /api/me`, `POST /api/reports`
-- Moderator: `GET /api/moderation/summary`, `GET /api/moderation/reports`, `POST /api/moderation/reports/{id}/{publish|reject}`, `GET /api/moderation/users`, `GET /api/moderation/log`
+- Authenticated: `GET /api/me`, `POST /api/reports`, `POST /api/reports/{id}/confirm`
+- Moderator: `GET /api/moderation/summary`, `GET /api/moderation/events`, `GET /api/moderation/marks`, `GET /api/moderation/reports`, `POST /api/moderation/reports/{id}/{publish|reject}`, `GET /api/moderation/users`, `GET /api/moderation/log`
 - Owner only: `POST /api/moderation/users/{telegram_id}/role/{user|moderator}`
 
 ## Important operational notes
