@@ -539,14 +539,16 @@ async def city_chat_send(body:dict,authorization:str|None=Header(default=None)):
  if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
   raise HTTPException(400,"Выберите город.")
  if not message or len(message)>1000: raise HTTPException(400,"Сообщение должно быть от 1 до 1000 символов.")
- await pool.execute("SELECT pg_advisory_xact_lock(hashtext($1))",str(u["telegram_id"]))
- recent=await pool.fetchval("SELECT count(*) FROM city_chat_messages WHERE telegram_id=$1 AND created_at>now()-interval '10 minutes'",u["telegram_id"])
- last=await pool.fetchval("SELECT created_at FROM city_chat_messages WHERE telegram_id=$1 ORDER BY created_at DESC LIMIT 1",u["telegram_id"])
- if last and (datetime.now(timezone.utc)-last).total_seconds()<2:
-  raise HTTPException(429,"Не отправляй сообщения чаще одного раза в 2 секунды.")
- if recent>=30:
-  raise HTTPException(429,"Лимит сообщений в городском чате на 10 минут исчерпан.")
- r=await pool.fetchrow("INSERT INTO city_chat_messages(city,telegram_id,username,display_name,message) VALUES($1,$2,$3,$4,$5) RETURNING id,created_at",city,u["telegram_id"],u["username"],u["display_name"],message)
+ async with pool.acquire() as c:
+  async with c.transaction():
+   await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))",str(u["telegram_id"]))
+   recent=await c.fetchval("SELECT count(*) FROM city_chat_messages WHERE telegram_id=$1 AND created_at>now()-interval '10 minutes'",u["telegram_id"])
+   last=await c.fetchval("SELECT created_at FROM city_chat_messages WHERE telegram_id=$1 ORDER BY created_at DESC LIMIT 1",u["telegram_id"])
+   if last and (datetime.now(timezone.utc)-last).total_seconds()<2:
+    raise HTTPException(429,"Не отправляй сообщения чаще одного раза в 2 секунды.")
+   if recent>=30:
+    raise HTTPException(429,"Лимит сообщений в городском чате на 10 минут исчерпан.")
+   r=await c.fetchrow("INSERT INTO city_chat_messages(city,telegram_id,username,display_name,message) VALUES($1,$2,$3,$4,$5) RETURNING id,created_at",city,u["telegram_id"],u["username"],u["display_name"],message)
  return {"ok":True,"id":r["id"],"created_at":r["created_at"].isoformat()}
 
 @app.get("/api/moderation/log")
