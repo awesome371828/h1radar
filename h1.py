@@ -383,6 +383,25 @@ async def health(): return {"ok":True,"service":"h1-radar","time":datetime.now(t
 async def public_config():
  return {"bot_username":BOT_USERNAME,"map_url":MAP_URL}
 
+@app.get("/api/public/overview")
+async def public_overview():
+ # Public aggregate metrics only: no personal identifiers or precise live report locations.
+ async with pool.acquire() as c:
+  row=await c.fetchrow("""SELECT
+   (SELECT count(*) FROM cities WHERE enabled=true) AS cities,
+   (SELECT count(*) FROM users) AS members,
+   (SELECT count(*) FROM reports WHERE status='published') AS published_total,
+   (SELECT count(*) FROM reports WHERE status='published' AND created_at>=now()-interval '24 hours') AS published_24h,
+   (SELECT count(*) FROM city_chat_messages WHERE created_at>=now()-interval '24 hours') AS chat_24h,
+   (SELECT count(*) FROM reports WHERE status='pending' AND created_at>=now()-interval '3 minutes') AS pending_recent""")
+  status=await c.fetchrow("""SELECT count(*) FILTER (WHERE last_seen_at>now()-interval '15 minutes') AS online,
+   max(created_at) AS last_report FROM reports WHERE status='published'""")
+ return {"ok":True,"updated_at":datetime.now(timezone.utc).isoformat(),
+  "cities":int(row["cities"] or 0),"members":int(row["members"] or 0),
+  "published_total":int(row["published_total"] or 0),"published_24h":int(row["published_24h"] or 0),
+  "chat_24h":int(row["chat_24h"] or 0),"pending_recent":int(row["pending_recent"] or 0),
+  "online":int(status["online"] or 0),"last_activity":status["last_report"].isoformat() if status["last_report"] else None}
+
 @app.post("/api/auth/start")
 async def auth_start(request:Request):
  client_ip=request.client.host if request.client else "unknown"
