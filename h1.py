@@ -772,12 +772,13 @@ async def mod_users(authorization:str|None=Header(default=None),q:str="",city:st
 async def set_role(telegram_id:int,role:str,authorization:str|None=Header(default=None)):
  actor=await moderator(authorization)
  if actor["role"]!="owner": raise HTTPException(403,"Назначать модераторов может только владелец.")
- if role not in ("user","moderator"): raise HTTPException(400,"Недопустимая роль.")
+ if role!="user": raise HTTPException(400,"Для назначения модератора используй форму с выбором города и прав.")
  if telegram_id==BOT_OWNER: raise HTTPException(400,"Нельзя изменить роль владельца.")
  async with pool.acquire() as c:
   async with c.transaction():
    result=await c.execute("UPDATE users SET role=$1 WHERE telegram_id=$2",role,telegram_id)
    if result.endswith("0"): raise HTTPException(404,"Пользователь не найден.")
+   await c.execute("DELETE FROM moderator_city_permissions WHERE telegram_id=$1",telegram_id)
    await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'role_change',$2,$3)",actor["telegram_id"],telegram_id,role)
  return {"ok":True,"role":role}
 
