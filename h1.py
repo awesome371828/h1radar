@@ -18,7 +18,16 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO"))
 log=logging.getLogger("h1")
 BOT_TOKEN=os.environ["BOT_TOKEN"]
 BOT_OWNER=int(os.environ["BOT_OWNER"])
-WEBAPP_URL=os.getenv("WEBAPP_URL","https://h1radar.relaxdev.ru").rstrip("/")
+def normalize_webapp_url(value: str | None) -> str:
+ raw=(value or "https://h1radar.relaxdev.ru").strip().rstrip("/")
+ if raw.startswith("//"): raw="https:"+raw
+ elif raw.startswith("http://"): raw="https://"+raw[7:]
+ elif not raw.lower().startswith("https://"): raw="https://"+raw
+ if not re.match(r"^https://[a-z0-9.-]+(?::[0-9]+)?(?:/[^\\s]*)?$",raw,re.I):
+  raise ValueError("WEBAPP_URL must be a valid public HTTPS URL")
+ return raw
+
+WEBAPP_URL=normalize_webapp_url(os.getenv("WEBAPP_URL"))
 DATABASE_URL=os.environ["DATABASE_URL"]
 BOT_USERNAME=os.getenv("BOT_USERNAME","").lstrip("@")
 INITDATA_MAX_AGE=int(os.getenv("TG_INITDATA_MAX_AGE","86400"))
