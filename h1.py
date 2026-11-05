@@ -421,18 +421,21 @@ async def lifespan(app:FastAPI):
  try:
   global BOT_USERNAME
   if not BOT_USERNAME:
-   me=await asyncio.wait_for(bot.get_me(),timeout=12)
+   me=await asyncio.wait_for(bot.get_me(),timeout=8)
    BOT_USERNAME=me.username or ""
-  await configure_bot_profile(bot)
  except asyncio.CancelledError:
   raise
  except Exception:
-  log.exception("Could not finish Telegram bot profile setup; polling will continue")
+  log.exception("Could not resolve Telegram bot username during startup")
  polling_task=asyncio.create_task(run_polling_forever(),name="h1-telegram-polling")
+ # Profile/avatar setup is non-critical and must not delay API readiness.
+ profile_task=asyncio.create_task(configure_bot_profile(bot),name="h1-bot-profile-setup")
  cleanup_task=asyncio.create_task(expire_pending_reports(),name="h1-cleanup")
  try:
   yield
  finally:
+  profile_task.cancel()
+  await asyncio.gather(profile_task,return_exceptions=True)
   if cleanup_task:
    cleanup_task.cancel()
    await asyncio.gather(cleanup_task,return_exceptions=True)
