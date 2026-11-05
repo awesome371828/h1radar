@@ -680,7 +680,7 @@ async def assign_city_moderator(body:dict,authorization:str|None=Header(default=
   raise HTTPException(409,"У этого города уже есть амбассадор. Сначала сними прежнее назначение.")
  if bot:
   try:
-   await bot.send_message(target["telegram_id"],"🛰 <b>Тебе выданы права команды H1 RADAR</b>\\nГород: <b>"+city_row["name"]+"</b>\\nПрава: "+", ".join(sorted(set(requested)))+"\\nОткрой панель команды: "+MAP_URL,parse_mode="HTML")
+   await bot.send_message(target["telegram_id"],"🛰 Тебе выданы права команды H1 RADAR\nГород: "+city_row["name"]+"\nПрава: "+", ".join(sorted(set(requested)))+"\nОткрой панель команды: "+MAP_URL)
   except Exception: log.warning("Could not notify newly assigned moderator %s",target["telegram_id"],exc_info=True)
  return {"ok":True,"telegram_id":target["telegram_id"],"city":city_row["name"],"permissions":sorted(set(requested))}
 
