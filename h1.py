@@ -202,7 +202,7 @@ async def lifespan(app:FastAPI):
  if pool: await pool.close()
 
 app=FastAPI(title="H1 RADAR API",version="1.0.0",lifespan=lifespan)
-app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL],allow_credentials=False,allow_methods=["GET","POST"],allow_headers=["Authorization","Content-Type"])
+app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL],allow_credentials=False,allow_methods=["GET","POST","DELETE"],allow_headers=["Authorization","Content-Type"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
@@ -214,6 +214,10 @@ class ReportIn(BaseModel):
  city:str=Field(min_length=2,max_length=80)
  category:str=Field(pattern="^(alert|all_clear|shelter|info)$")
  description:str=Field(default="",max_length=500)
+
+@app.get("/privacy")
+async def privacy():
+    return FileResponse("static/privacy.html")
 
 @app.get("/api/health")
 async def health(): return {"ok":True,"service":"h1-radar","time":datetime.now(timezone.utc).isoformat()}
@@ -295,3 +299,15 @@ async def mod_log(authorization:str|None=Header(default=None)):
  await moderator(authorization)
  rows=await pool.fetch("SELECT actor_id,action,target_id,details,created_at FROM moderation_log ORDER BY created_at DESC LIMIT 100")
  return {"items":[{"actor":r["actor_id"],"action":r["action"],"target":r["target_id"],"details":r["details"],"created_at":r["created_at"].isoformat()} for r in rows]}
+
+
+@app.delete("/api/account")
+async def delete_account(authorization:str|None=Header(default=None)):
+    u=await current_user(authorization)
+    if u["role"]=="owner":
+        raise HTTPException(400,"Удаление аккаунта владельца через приложение отключено.")
+    async with pool.acquire() as c:
+        async with c.transaction():
+            await c.execute("DELETE FROM moderation_log WHERE actor_id=$1 OR target_id=$1",u["telegram_id"])
+            await c.execute("DELETE FROM users WHERE telegram_id=$1",u["telegram_id"])
+    return {"ok":True,"message":"Аккаунт и номер удалены. Опубликованные сообщения обезличены."}
