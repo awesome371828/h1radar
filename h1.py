@@ -258,7 +258,7 @@ def user_json(r):
 
 def feed_json(r):
  return {"id":r["id"],"city":r["city"],"category":r["category"],
- "description":r["description"],"latitude":r["latitude"] if "latitude" in r.keys() else None,"longitude":r["longitude"] if "longitude" in r.keys() else None,"confirmations":r["confirmations"] if "confirmations" in r.keys() else 1,"status":r["status"] if "status" in r.keys() else "published","created_at":r["created_at"].isoformat()}
+ "description":r["description"],"latitude":r["latitude"] if "latitude" in r.keys() else None,"longitude":r["longitude"] if "longitude" in r.keys() else None,"status":r["status"] if "status" in r.keys() else "published","created_at":r["created_at"].isoformat()}
 
 def app_kb(path: str = ""):
  url=MAP_URL + (path if path.startswith("/") else ("/"+path if path else ""))
