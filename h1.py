@@ -268,7 +268,7 @@ def feed_json(r):
 
 def app_kb(path: str = ""):
  url=MAP_URL + (path if path.startswith("/") else ("/"+path if path else ""))
- return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛰 Открыть карту H1 RADAR",url=url)],[InlineKeyboardButton(text="🔐 Войти на сайте",url=url)]])
+ return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛰 Открыть карту H1 RADAR",url=url)],[InlineKeyboardButton(text="Политика конфиденциальности",url=url+"/privacy")]])
 
 async def ensure_user(u):
  name=" ".join(x for x in [u.first_name,u.last_name] if x) or "Пользователь"
