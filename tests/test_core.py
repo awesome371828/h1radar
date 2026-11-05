@@ -103,6 +103,29 @@ class ModerationExpansionTests(unittest.TestCase):
         self.assertIn('id="chatSearch"', html)
         self.assertIn('"/moderation/chat?city="', html)
 
+    def test_profile_activity_stats_and_report_flow(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        backend = (root / "h1.py").read_text(encoding="utf-8")
+        app_js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        index = (root / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('"reports_total"', backend)
+        self.assertIn('"confirmations_given"', backend)
+        self.assertIn('submitNearby();', app_js)
+        self.assertNotIn('id="submitNearby"', index)
+        self.assertIn('new Notification(', app_js)
+
+    def test_moscow_clock_and_collapsible_map_panel(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        app_js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        index = (root / "static" / "index.html").read_text(encoding="utf-8")
+        home = (root / "static" / "home.html").read_text(encoding="utf-8")
+        self.assertIn('timeZone:"Europe/Moscow"', app_js)
+        self.assertIn('id="moscowClock"', index)
+        self.assertIn('id="sideToggle"', index)
+        self.assertIn('id="cityListToggle"', home)
+
 
 if __name__ == "__main__":
     unittest.main()
