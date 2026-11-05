@@ -29,35 +29,61 @@ async function submitNearby(){if(!nearbyKind){toast("Выбери тип отм�
 function bindNearby(){document.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>startMapPick(b.dataset.kind));$("nearbyClose").onclick=()=>{$("nearbyModal").hidden=true;if(pickMode){pickMode=false;$("mapPickHint").hidden=true;if(map)map.getCanvas().style.cursor="";}};$("nearbyModal").onclick=e=>{if(e.target===$("nearbyModal"))$("nearbyModal").hidden=true};$("geoReport").onclick=()=>{if(!navigator.geolocation){toast("Геопозиция недоступна");return} $("geoNote").textContent="Запрашиваем геопозицию…";navigator.geolocation.getCurrentPosition(p=>{if(!isRussia(p.coords.longitude,p.coords.latitude)){toast("Геопозиция находится за пределами России. Выбери точку на карте.");return;}if(setNearbyPoint(p.coords.longitude,p.coords.latitude,"Геопозиция определена"))submitNearby();},()=>{$("geoNote").textContent="Не удалось получить геопозицию. Можно указать точку на карте."},{enableHighAccuracy:false,timeout:10000,maximumAge:60000})};$("pickOnMap").onclick=()=>{if(!nearbyKind){toast("Сначала выбери тип отметки");return;}$("nearbyModal").hidden=true;pickMode=true;if(map)map.getCanvas().style.cursor="crosshair";toast("Нажми на карте внутри России, чтобы поставить отметку.");};$("reportBtn").onclick=()=>reportForm();}
 let loginTimer=null,historyMode=false,mapStarted=false;
 function setGateState(message){const a=$("gateState"),b=$("loginState");if(a)a.textContent=message;if(b)b.textContent=message}
-function lockMap(message="Войди через Telegram, чтобы открыть карту."){if(loginTimer){clearInterval(loginTimer);loginTimer=null;}localStorage.removeItem("h1_session");auth="";me=null;mapStarted=false;document.body.classList.add("auth-locked");$("authGate").hidden=false;setGateState(message);}
+function lockMap(message="Войди через Telegram, чтобы открыть карту."){if(loginTimer){clearTimeout(loginTimer);loginTimer=null;}loginInProgress=false;const gateButton=$("gateLogin");if(gateButton)gateButton.disabled=false;localStorage.removeItem("h1_session");auth="";me=null;mapStarted=false;document.body.classList.add("auth-locked");$("authGate").hidden=false;setGateState(message);}
 async function startMapApp(){if(mapStarted)return;mapStarted=true;document.body.classList.remove("auth-locked");$("authGate").hidden=true;$("profileCode").textContent=me.code||me.username||"Профиль";if(me.role!=="user")$("modTab").hidden=false;initMap();try{await loadCities();await loadFeed();if(me.role!=="user")await loadModeration();}catch(e){toast(e.message)}}
+let loginInProgress=false;
 async function loginFromMap(){
+ if(loginInProgress)return;
+ loginInProgress=true;
+ const button=$("gateLogin");
+ if(button)button.disabled=true;
  const tab=window.open("about:blank","_blank");
+ const stopPolling=()=>{if(loginTimer){clearTimeout(loginTimer);loginTimer=null;}};
  try{
   setGateState("Создаём защищённую ссылку входа…");
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
-  let r;try{r=await fetch(API+"/auth/start",{method:"POST",signal:controller.signal})}finally{clearTimeout(timer)}
-  const d=await r.json();if(!r.ok)throw Error(d.detail||"Не удалось начать вход");
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000);
+  let r;try{r=await fetch(API+"/auth/start",{method:"POST",signal:controller.signal,cache:"no-store"})}finally{clearTimeout(timer)}
+  const d=await r.json().catch(()=>({detail:"Сервер вернул некорректный ответ."}));
+  if(!r.ok)throw Error(d.detail||"Не удалось начать вход");
+  if(!d.nonce||!d.bot_url)throw Error("Сервер не создал ссылку входа. Попробуй ещё раз.");
   if(tab)tab.location=d.bot_url;else window.location.href=d.bot_url;
-  setGateState("Открой бота H1 RADAR и нажми Start. Мы проверяем подтверждение автоматически.");
-  if(loginTimer)clearInterval(loginTimer);
-  let checks=0;
-  loginTimer=setInterval(async()=>{
+  setGateState("Открой бота H1 RADAR и нажми Start. Проверяем подтверждение автоматически.");
+  stopPolling();
+  let checks=0,finished=false;
+  const finish=()=>{finished=true;stopPolling();loginInProgress=false;if(button)button.disabled=false;};
+  const poll=async()=>{
+   if(finished)return;
    checks++;
    try{
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
-    let p;try{p=await fetch(API+"/auth/poll?nonce="+encodeURIComponent(d.nonce),{signal:controller.signal,cache:"no-store"})}finally{clearTimeout(timer)}
-    const x=await p.json();
-    if(x.token){
-     clearInterval(loginTimer);loginTimer=null;localStorage.setItem("h1_session",x.token);auth="Bearer "+x.token;
-     try{const meData=await api("/me");me=meData.user;profileStats=meData.stats||profileStats;await startMapApp();toast("Добро пожаловать в H1 RADAR");}
-     catch(e){lockMap("Не удалось проверить аккаунт. Попробуй войти ещё раз.");setGateState(e.message);}
-    }else if(!p.ok){clearInterval(loginTimer);loginTimer=null;setGateState(x.detail||"Ссылка истекла. Нажми кнопку входа ещё раз.");}
-    else if(checks%5===0)setGateState("Ожидаем подтверждение в Telegram…");
-    if(checks>=300){clearInterval(loginTimer);loginTimer=null;setGateState("Время ожидания истекло. Начни вход заново.");}
-   }catch(e){if(checks%5===0)setGateState("Пока нет ответа от сервера. Продолжаем проверку…");}
-  },1600);
- }catch(e){if(tab)tab.close();setGateState(e.name==="AbortError"?"Сервер не ответил вовремя. Попробуй ещё раз.":e.message);}
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+    let response;try{response=await fetch(API+"/auth/poll?nonce="+encodeURIComponent(d.nonce),{signal:controller.signal,cache:"no-store"})}finally{clearTimeout(timer)}
+    const result=await response.json().catch(()=>({detail:"Сервер вернул некорректный ответ."}));
+    if(result.token){
+     finish();
+     localStorage.setItem("h1_session",result.token);auth="Bearer "+result.token;
+     try{
+      const meData=await api("/me");me=meData.user;profileStats=meData.stats||profileStats;
+      await startMapApp();toast("Добро пожаловать в H1 RADAR");
+     }catch(error){lockMap("Не удалось проверить аккаунт. Войди ещё раз.");setGateState(error.message||"Ошибка проверки аккаунта.");}
+     return;
+    }
+    if(response.status===410||response.status===400||!response.ok){
+     finish();setGateState(result.detail||"Ссылка входа истекла. Нажми кнопку входа ещё раз.");return;
+    }
+    if(checks%6===0)setGateState("Ожидаем подтверждение в Telegram…");
+   }catch(error){
+    // Таймауты и краткие сетевые сбои не запускают параллельный poll и не расходуют nonce.
+    if(checks%6===0)setGateState("Сервер временно не отвечает. Продолжаем проверку…");
+   }
+   if(checks>=300){finish();setGateState("Время ожидания истекло. Начни вход заново.");return;}
+   if(!finished)loginTimer=setTimeout(poll,1800);
+  };
+  loginTimer=setTimeout(poll,1200);
+ }catch(error){
+  if(tab)tab.close();
+  stopPolling();loginInProgress=false;if(button)button.disabled=false;
+  setGateState(error.name==="AbortError"?"Сервер не ответил вовремя. Попробуй ещё раз.":error.message||"Не удалось начать вход.");
+ }
 }
 let profileStats={reports_total:0,reports_published:0,confirmations_given:0,chat_messages:0};
 async function profile(){if(!me){modal('<div class="profile-login"><div class="profile-emblem">H1</div><h2>Твой профиль H1 RADAR</h2><p>Войди через Telegram, чтобы получить персональный код, историю активности и доступ к функциям сообщества.</p><button class="primary wide" id="loginTelegram">Продолжить через Telegram</button><p id="loginState" class="empty">Без пароля · одноразовая ссылка</p></div>');$("loginTelegram").onclick=loginFromMap;return}
