@@ -75,5 +75,22 @@ class TelegramInitDataTests(unittest.TestCase):
             h1.verify_init_data(raw)
 
 
+class ModerationExpansionTests(unittest.TestCase):
+    def test_schema_contains_persistent_restrictions_and_city_requests(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS user_restrictions", h1.SCHEMA)
+        self.assertIn("CREATE TABLE IF NOT EXISTS city_requests", h1.SCHEMA)
+
+    def test_owner_city_management_routes_exist(self):
+        paths = {route.path for route in h1.app.routes}
+        self.assertIn("/api/moderation/cities", paths)
+        self.assertIn("/api/moderation/cities/{city_id}", paths)
+        self.assertIn("/api/moderation/city-requests", paths)
+
+    def test_account_restriction_and_chat_review_routes_exist(self):
+        paths = {route.path for route in h1.app.routes}
+        self.assertIn("/api/moderation/users/{telegram_id}/restriction", paths)
+        self.assertIn("/api/moderation/chat", paths)
+
+
 if __name__ == "__main__":
     unittest.main()
