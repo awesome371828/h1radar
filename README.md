@@ -33,10 +33,10 @@ or build the included Dockerfile.
 - `GET /api/health`, `GET /api/cities`, `GET /api/feed`, `GET /api/city-chat`, `POST /api/city-chat`
 - Authenticated: `GET /api/me`, `POST /api/reports`, `POST /api/reports/{id}/confirm`
 - Moderator: `GET /api/moderation/summary`, `GET /api/moderation/events`, `GET /api/moderation/marks`, `GET /api/moderation/reports`, `POST /api/moderation/reports/{id}/{publish|reject}`, `GET /api/moderation/users`, `GET /api/moderation/log`
-- Owner only: `POST /api/moderation/users/{telegram_id}/role/{user|moderator}`
+- Owner only: `GET/POST /api/moderation/assignments`, `DELETE /api/moderation/assignments/{telegram_id}/{city_id}/{permission}`; moderator access is granted per city and permission, not as a global role toggle.
 
 ## Important operational notes
-This initial implementation is a civic reporting platform, not an authoritative emergency-alert feed. Do not submit tactical, military, or sensitive location details. The startup schema seeds more than 100 Russian cities and settlements. The base map covers the full Russian territory; the city directory can be extended with additional verified coordinates as needed. OSM tile usage is subject to its public tile policy; for production nationwide traffic, configure a compliant tile provider/style and attribution. Nearby marks store rounded coordinates (two decimal places); the author counts as the first confirmation. Two additional distinct users are required for automatic publication. Moderators can also publish or reject a mark. Push delivery is not configured. Sign-in confirms control of the Telegram account; the current browser-login flow does not request or store a phone number.
+This initial implementation is a civic reporting platform, not an authoritative emergency-alert feed. Do not submit tactical, military, or sensitive location details. The startup schema seeds more than 100 Russian cities and settlements. Pending reports are deleted automatically after five minutes if they do not receive the required independent confirmations. The base map covers the full Russian territory; the city directory can be extended with additional verified coordinates as needed. OSM tile usage is subject to its public tile policy; for production nationwide traffic, configure a compliant tile provider/style and attribution. Nearby marks store rounded coordinates (two decimal places); the author counts as the first confirmation. Two additional distinct users are required for automatic publication. Moderators can also publish or reject a mark. Push delivery is not configured. Sign-in confirms control of the Telegram account; the current browser-login flow does not request or store a phone number.
 
 
 ## Расширенная модерация и каталог городов
@@ -53,7 +53,7 @@ This initial implementation is a civic reporting platform, not an authoritative 
 - `POST /api/moderation/users/{telegram_id}/restriction` — ограничение аккаунта (только владелец); JSON: `{"reason":"...","hours":24}`. Без `hours` ограничение бессрочное.
 - `DELETE /api/moderation/users/{telegram_id}/restriction` — снятие ограничения.
 
-Ограничения аккаунта проверяются централизованно в `current_user`, поэтому распространяются на все защищённые API, а не только на один экран. Новые таблицы создаются при запуске через `SCHEMA`; отдельная повторно применимая миграция находится в `migrations/002_moderation_expansion.sql`.
+Ограничения аккаунта проверяются централизованно в `current_user`, поэтому распространяются на все защищённые API, а не только на один экран. Новые таблицы создаются при запуске через `SCHEMA`; отдельные повторно применимые миграции находятся в `migrations/002_moderation_expansion.sql` и `migrations/003_city_moderator_permissions.sql`.
 
 Городские координаты валидируются по геометрии России. Заявки и изменения каталога записываются в журнал модерации. Публичная статистика агрегирована и не раскрывает персональные данные.
 
@@ -63,7 +63,9 @@ This initial implementation is a civic reporting platform, not an authoritative 
 - The map requires a verified Telegram session before rendering the map or loading city/feed/chat data. The landing page exposes only aggregate statistics and a public city directory. The authenticated map updates its feed every 15 seconds while visible, displays timestamps in Europe/Moscow, supports live/history modes, city filtering, city chat, collapsible side panel and browser notifications for new published reports while the page is open.
 - A report is submitted immediately after the user selects a category and taps a point inside Russia; there is no second manual submit button. Geolocation selection also submits directly.
 - User profiles show a public code, role, join date and personal activity totals. City suggestions are submitted for owner review.
-- Moderation includes city catalog editing, city-request review, account restrictions and city-chat message search/deletion.
+- Moderation includes city catalog editing, city-request review, account restrictions, city-chat search/deletion and owner-managed city-scoped moderator appointments.
+- Moderator appointments are assigned by public resident code and city. Permissions are independently selectable: events, marks, people, beta applications, outage notices, statistics, appeals, map announcements, feed, support and the single-city ambassador title. A partial unique index guarantees one ambassador per city. Unauthorized pages are hidden in the dashboard and protected API routes return 403.
+- Tactical PVO analysis and operational military-location access are intentionally unavailable; the corresponding option is visibly disabled in the appointment form.
 - Browser notifications are page-session notifications, not server push; they work while the map tab is open and permission is granted.
 
 The interface is a feature-level H1 implementation, not a literal copy of GDE.WTF. Military tracking, live operational positions, weapon/PVO targeting data and other sensitive operational features are intentionally not implemented. H1 is a civil community-reporting service and is not an official emergency alert source.
@@ -74,6 +76,5 @@ The interface is a feature-level H1 implementation, not a literal copy of GDE.WT
 - Страница карты закрыта полноэкранным экраном входа до подтверждения Telegram-аккаунта.
 - API городов, ленты и чтения городского чата требуют Bearer-сессию; для главной страницы предусмотрен отдельный публичный каталог без координат.
 - После подтверждения одноразовой ссылки карта открывается автоматически. Сессия действует 30 дней.
-- Бот показывает кнопку Web App «Открыть H1 RADAR» в меню Telegram и обновляет приветствие/справку при старте.
-- Фирменные SVG-ресурсы: `static/h1-avatar.svg` (аватар) и `static/favicon.svg` (favicon).
-- Telegram не позволяет боту менять собственную фотографию профиля через Bot API. Файл аватара подготовлен в репозитории; его нужно один раз установить в профиле бота через @BotFather.
+- Бот показывает кнопку Web App «Открыть H1 RADAR» в меню Telegram и обновляет имя, описание, команды и меню при старте.
+- Фирменные SVG-ресурсы: `static/h1-avatar.svg` (исходник аватара) и `static/favicon.svg` (favicon). При запуске бот формирует JPG из фирменного аватара и пытается установить его через Telegram Bot API; сбой этой операции не останавливает polling.
