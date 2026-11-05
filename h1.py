@@ -569,6 +569,17 @@ async def city_chat_send(body:dict,authorization:str|None=Header(default=None)):
    r=await c.fetchrow("INSERT INTO city_chat_messages(city,telegram_id,username,display_name,message) VALUES($1,$2,$3,$4,$5) RETURNING id,created_at",city,u["telegram_id"],u["username"],u["display_name"],message)
  return {"ok":True,"id":r["id"],"created_at":r["created_at"].isoformat()}
 
+@app.delete("/api/moderation/chat/{message_id}")
+async def moderation_delete_chat(message_id:int,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ async with pool.acquire() as c:
+  async with c.transaction():
+   row=await c.fetchrow("SELECT city,telegram_id,message FROM city_chat_messages WHERE id=$1 FOR UPDATE",message_id)
+   if not row: raise HTTPException(404,"Сообщение уже удалено или не найдено.")
+   await c.execute("DELETE FROM city_chat_messages WHERE id=$1",message_id)
+   await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'chat_message_deleted',$2,$3)",actor["telegram_id"],row["telegram_id"],"Город: "+row["city"]+" · сообщение #"+str(message_id))
+ return {"ok":True}
+
 @app.get("/api/moderation/log")
 async def mod_log(authorization:str|None=Header(default=None)):
  await moderator(authorization)
