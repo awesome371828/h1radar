@@ -212,18 +212,6 @@ async def start(m:Message):
  greeting="Аккаунт H1 RADAR создан." if fresh else "С возвращением в H1 RADAR."
  await m.answer(f"{greeting}\nВаш код: <b>{code}</b>\n\nКарта открывается в обычном браузере — без Telegram Mini App.",reply_markup=app_kb(),parse_mode="HTML")
 
-@dp.message(Command("radar"))
-async def radar(m:Message):
- await ensure_user(m.from_user)
- await m.answer("Открыть карту H1 RADAR:",reply_markup=app_kb())
-
-@dp.message(Command("moderation"))
-async def moderation(m:Message):
- row=await pool.fetchrow("SELECT role FROM users WHERE telegram_id=$1",m.from_user.id)
- if not row or row["role"] not in ("owner","moderator"):
-  await m.answer("Панель доступна только владельцу и назначенным модераторам."); return
- await m.answer("Панель управления H1 RADAR:",reply_markup=app_kb("/?panel=moderation"))
-
 @dp.message(Command("help"))
 async def help_cmd(m:Message):
  await m.answer("/start — регистрация и вход\n/radar — открыть карту в браузере\n/moderation — панель модерации")
