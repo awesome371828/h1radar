@@ -533,7 +533,16 @@ async def auth_start(request:Request):
  if len(attempts)>=8:
   raise HTTPException(429,"Слишком много попыток входа. Попробуйте через несколько минут.")
  attempts.append(now); _auth_attempts[client_ip]=attempts
- if not BOT_USERNAME: raise HTTPException(503,"Бот ещё запускается. Попробуйте снова.")
+ global BOT_USERNAME
+ if not BOT_USERNAME and bot is not None:
+  try:
+   me=await asyncio.wait_for(bot.get_me(),timeout=5)
+   BOT_USERNAME=me.username or ""
+  except asyncio.CancelledError:
+   raise
+  except Exception:
+   log.exception("Could not refresh bot username for login link")
+ if not BOT_USERNAME: raise HTTPException(503,"Бот временно недоступен. Попробуйте ещё раз через несколько секунд.")
  nonce=secrets.token_urlsafe(24)
  await pool.execute("INSERT INTO login_challenges(nonce,expires_at) VALUES($1,now()+interval '10 minutes')",nonce)
  return {"ok":True,"nonce":nonce,"bot_url":f"https://t.me/{BOT_USERNAME}?start=login_{nonce}"}
