@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS reports(
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), reviewed_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS reports_feed_idx ON reports(status,created_at DESC);
+CREATE TABLE IF NOT EXISTS city_chat_messages(id BIGSERIAL PRIMARY KEY, city TEXT NOT NULL, telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL, username TEXT, display_name TEXT NOT NULL, message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 1000), created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS city_chat_city_time_idx ON city_chat_messages(city,created_at DESC);
 CREATE TABLE IF NOT EXISTS moderation_log(
  id BIGSERIAL PRIMARY KEY, actor_id BIGINT NOT NULL, action TEXT NOT NULL,
  target_id BIGINT, details TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -162,7 +164,7 @@ async def moderator(auth:str|None):
  return row
 
 def user_json(r):
- return {"id":r["telegram_id"],"username":r["username"],"name":r["display_name"],
+ return {"id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else None,"name":r["display_name"],
  "code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()}
 
 def feed_json(r):
@@ -193,7 +195,7 @@ async def configure_bot_profile(b:Bot):
  await b.set_my_name("H1 RADAR")
  await b.set_my_description("H1 RADAR — гражданская карта и лента сообщений сообщества. Не является официальным источником экстренных оповещений.")
  await b.set_my_short_description("Гражданская карта и сообщения сообщества.")
- await b.set_my_commands([BotCommand(command="start",description="Создать аккаунт и открыть сайт"),BotCommand(command="radar",description="Открыть карту в браузере"),BotCommand(command="moderation",description="Панель модерации"),BotCommand(command="help",description="Помощь")])
+ await b.set_my_commands([BotCommand(command="start",description="Открыть H1 RADAR"),BotCommand(command="help",description="Помощь")])
  # Убираем прежнюю кнопку Mini App из меню Telegram.
  await b.set_chat_menu_button(menu_button=MenuButtonDefault())
 
@@ -253,9 +255,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 async def index(request:Request):
     host=request.headers.get("host","").split(":")[0].lower()
-    if host.startswith("map.") or request.query_params.get("view")=="map":
-        return FileResponse("static/index.html")
-    return FileResponse("static/home.html")
+    if host.startswith("moder."):
+        return FileResponse("static/moderation.html")
+    return FileResponse("static/index.html")
 
 @app.get("/map")
 async def map_page():
@@ -371,6 +373,23 @@ async def set_role(telegram_id:int,role:str,authorization:str|None=Header(defaul
    if result.endswith("0"): raise HTTPException(404,"Пользователь не найден.")
    await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'role_change',$2,$3)",actor["telegram_id"],telegram_id,role)
  return {"ok":True,"role":role}
+
+@app.get("/api/city-chat")
+async def city_chat(city:str,after:int=0):
+ if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
+  raise HTTPException(400,"Неизвестный город.")
+ rows=await pool.fetch("SELECT id,username,display_name,message,created_at FROM city_chat_messages WHERE city=$1 AND id>$2 ORDER BY id DESC LIMIT 100",city,after)
+ return {"items":[{"id":r["id"],"username":r["username"],"name":r["display_name"],"message":r["message"],"created_at":r["created_at"].isoformat()} for r in reversed(rows)]}
+
+@app.post("/api/city-chat")
+async def city_chat_send(body:dict,authorization:str|None=Header(default=None)):
+ u=await current_user(authorization)
+ city=str(body.get("city","")).strip(); message=str(body.get("message","")).strip()
+ if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
+  raise HTTPException(400,"Выберите город.")
+ if not message or len(message)>1000: raise HTTPException(400,"Сообщение должно быть от 1 до 1000 символов.")
+ r=await pool.fetchrow("INSERT INTO city_chat_messages(city,telegram_id,username,display_name,message) VALUES($1,$2,$3,$4,$5) RETURNING id,created_at",city,u["telegram_id"],u["username"],u["display_name"],message)
+ return {"ok":True,"id":r["id"],"created_at":r["created_at"].isoformat()}
 
 @app.get("/api/moderation/log")
 async def mod_log(authorization:str|None=Header(default=None)):
