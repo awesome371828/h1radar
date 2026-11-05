@@ -44,7 +44,21 @@ MAP_URL=normalize_webapp_url(os.getenv("MAP_URL","https://map.h1radar.relaxdev.r
 if urlsplit(MAP_URL).hostname=="h1radar.relaxdev.ru":
  MAP_URL="https://map.h1radar.relaxdev.ru"
 log.info("Public H1 RADAR map URL: %s", MAP_URL)
-DATABASE_URL=os.environ["DATABASE_URL"]\nwith open(os.path.join(os.path.dirname(__file__),"static","russia.geojson"),encoding="utf-8") as _geo_file:\n RUSSIA_GEOMETRY=json.load(_geo_file)["geometry"]\ndef _point_in_ring(lon:float,lat:float,ring:list)->bool:\n inside=False\n j=len(ring)-1\n for i in range(len(ring)):\n  xi,yi=ring[i][0],ring[i][1]; xj,yj=ring[j][0],ring[j][1]\n  if (yi>lat)!=(yj>lat) and lon<(xj-xi)*(lat-yi)/(yj-yi+1e-15)+xi: inside=not inside\n  j=i\n return inside\ndef point_in_russia(lon:float,lat:float)->bool:\n if not (-180<=lon<=180 and -90<=lat<=90): return False\n polygons=[RUSSIA_GEOMETRY["coordinates"]] if RUSSIA_GEOMETRY["type"]=="Polygon" else RUSSIA_GEOMETRY["coordinates"]\n return any(_point_in_ring(lon,lat,poly[0]) and not any(_point_in_ring(lon,lat,hole) for hole in poly[1:]) for poly in polygons)
+DATABASE_URL=os.environ["DATABASE_URL"]
+with open(os.path.join(os.path.dirname(__file__),"static","russia.geojson"),encoding="utf-8") as _geo_file:
+ RUSSIA_GEOMETRY=json.load(_geo_file)["geometry"]
+def _point_in_ring(lon:float,lat:float,ring:list)->bool:
+ inside=False
+ j=len(ring)-1
+ for i in range(len(ring)):
+  xi,yi=ring[i][0],ring[i][1]; xj,yj=ring[j][0],ring[j][1]
+  if (yi>lat)!=(yj>lat) and lon<(xj-xi)*(lat-yi)/(yj-yi+1e-15)+xi: inside=not inside
+  j=i
+ return inside
+def point_in_russia(lon:float,lat:float)->bool:
+ if not (-180<=lon<=180 and -90<=lat<=90): return False
+ polygons=[RUSSIA_GEOMETRY["coordinates"]] if RUSSIA_GEOMETRY["type"]=="Polygon" else RUSSIA_GEOMETRY["coordinates"]
+ return any(_point_in_ring(lon,lat,poly[0]) and not any(_point_in_ring(lon,lat,hole) for hole in poly[1:]) for poly in polygons)
 BOT_USERNAME=os.getenv("BOT_USERNAME","").lstrip("@")
 _auth_attempts:dict[str,list[float]]={}
 INITDATA_MAX_AGE=int(os.getenv("TG_INITDATA_MAX_AGE","86400"))
@@ -418,6 +432,10 @@ async def feed(city:str|None=None,limit:int=50,hours:int=24):
 async def create_report(body:ReportIn,authorization:str|None=Header(default=None)):
  u=await current_user(authorization)
  city=body.city.strip(); desc=body.description.strip()
+ if body.latitude is None or body.longitude is None:
+  raise HTTPException(400,"Укажи точку на карте или разреши геопозицию.")
+ if not point_in_russia(body.longitude,body.latitude):
+  raise HTTPException(400,"Отметки можно ставить только на территории России.")
  if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
   raise HTTPException(400,"Выберите город из списка.")
  lat=round(body.latitude,2) if body.latitude is not None else None
