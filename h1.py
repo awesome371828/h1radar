@@ -109,6 +109,15 @@ CREATE TABLE IF NOT EXISTS moderation_log(
 );
 CREATE TABLE IF NOT EXISTS user_restrictions(telegram_id BIGINT PRIMARY KEY REFERENCES users(telegram_id) ON DELETE CASCADE,reason TEXT NOT NULL DEFAULT '',expires_at TIMESTAMPTZ,created_by BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS city_requests(id BIGSERIAL PRIMARY KEY,telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,city_name TEXT NOT NULL,region TEXT NOT NULL DEFAULT '',latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),moderator_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),reviewed_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS moderator_city_permissions(
+ id BIGSERIAL PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+ city_id BIGINT NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+ permission TEXT NOT NULL CHECK(permission IN ('events','marks','people','beta','outages','statistics','appeals','announcements','feed','support','ambassador')),
+ granted_by BIGINT NOT NULL REFERENCES users(telegram_id), created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ UNIQUE(telegram_id,city_id,permission)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_city_ambassador_idx ON moderator_city_permissions(city_id) WHERE permission='ambassador';
+CREATE INDEX IF NOT EXISTS moderator_city_permissions_user_idx ON moderator_city_permissions(telegram_id,city_id);
 CREATE TABLE IF NOT EXISTS cities(id BIGSERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,region TEXT NOT NULL DEFAULT '',latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,enabled BOOLEAN NOT NULL DEFAULT true);
 INSERT INTO cities(name,region,latitude,longitude) VALUES
 ('Москва','Москва',55.7558,37.6173),
@@ -254,11 +263,25 @@ async def current_user(auth:str|None):
  await pool.execute("UPDATE users SET last_seen_at=now() WHERE telegram_id=$1",row["telegram_id"])
  return row
 
-async def moderator(auth:str|None):
+async def moderator(auth:str|None,permission:str|None=None,city:str|None=None):
  row=await current_user(auth)
- if row["role"] not in ("owner","moderator"): raise HTTPException(403,"Недостаточно прав.")
+ if row["role"] not in ("owner","moderator"): raise HTTPException(403,"У аккаунта нет доступа к панели команды.")
+ if permission: await require_permission(row,permission,city)
  return row
 
+PERMISSIONS={"events","marks","people","beta","outages","statistics","appeals","announcements","feed","support","ambassador"}
+async def permissions_for(user):
+ if user["role"]=="owner": return sorted(PERMISSIONS)
+ rows=await pool.fetch("SELECT c.name,p.permission FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 ORDER BY c.name,p.permission",user["telegram_id"])
+ return [{"city":r["name"],"permission":r["permission"]} for r in rows]
+async def require_permission(actor,permission,city=None):
+ if actor["role"]=="owner": return
+ if actor["role"]!="moderator": raise HTTPException(403,"У аккаунта нет доступа к этому разделу.")
+ if city:
+  ok=await pool.fetchval("SELECT EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission=$2 AND c.name=$3)",actor["telegram_id"],permission,city)
+ else:
+  ok=await pool.fetchval("SELECT EXISTS(SELECT 1 FROM moderator_city_permissions WHERE telegram_id=$1 AND permission=$2)",actor["telegram_id"],permission)
+ if not ok: raise HTTPException(403,"У аккаунта нет доступа к этому разделу.")
 def user_json(r):
  return {"id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],
  "code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()}
@@ -347,7 +370,7 @@ async def expire_pending_reports():
  while True:
   try:
    if pool is not None:
-    result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '3 minutes'")
+    result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '5 minutes'")
     if result!="DELETE 0": log.info("Expired unconfirmed marks: %s",result)
     await pool.execute("DELETE FROM login_challenges WHERE expires_at<now() OR consumed_at IS NOT NULL")
     await pool.execute("DELETE FROM web_sessions WHERE expires_at<now()")
@@ -452,7 +475,7 @@ async def public_overview():
    (SELECT count(*) FROM reports WHERE status='published') AS published_total,
    (SELECT count(*) FROM reports WHERE status='published' AND created_at>=now()-interval '24 hours') AS published_24h,
    (SELECT count(*) FROM city_chat_messages WHERE created_at>=now()-interval '24 hours') AS chat_24h,
-   (SELECT count(*) FROM reports WHERE status='pending' AND created_at>=now()-interval '3 minutes') AS pending_recent""")
+   (SELECT count(*) FROM reports WHERE status='pending' AND created_at>=now()-interval '5 minutes') AS pending_recent""")
   status=await c.fetchrow("""SELECT (SELECT count(*) FROM users WHERE last_seen_at>now()-interval '15 minutes') AS online,
    (SELECT max(created_at) FROM reports WHERE status='published') AS last_report""")
  return {"ok":True,"updated_at":datetime.now(timezone.utc).isoformat(),
@@ -498,7 +521,7 @@ async def me(authorization:str|None=Header(default=None)):
   (SELECT count(*) FROM report_confirmations WHERE telegram_id=$1) AS confirmations_given,
   (SELECT count(*) FROM city_chat_messages WHERE telegram_id=$1) AS chat_messages
  """,r["telegram_id"])
- return {"user":user_json(r),"stats":{k:int(stats[k] or 0) for k in ("reports_total","reports_published","confirmations_given","chat_messages")}}
+ return {"user":{**user_json(r),"permissions":await permissions_for(r)},"stats":{k:int(stats[k] or 0) for k in ("reports_total","reports_published","confirmations_given","chat_messages")}}
 
 @app.get("/api/public/cities")
 async def public_cities():
@@ -516,7 +539,7 @@ async def feed(city:str|None=None,limit:int=50,hours:int=24,authorization:str|No
  await current_user(authorization)
  limit=max(1,min(limit,100)); hours=max(1,min(hours,720))
  # Pending marks are visible to everyone for their three-minute confirmation window.
- if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND city=$1 AND created_at>=now()-make_interval(hours=>$2) ORDER BY created_at DESC LIMIT $3",city,hours,limit)
+ if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '5 minutes') AND city=$1 AND created_at>=now()-make_interval(hours=>$2) ORDER BY created_at DESC LIMIT $3",city,hours,limit)
  else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND created_at>=now()-make_interval(hours=>$1) ORDER BY created_at DESC LIMIT $2",hours,limit)
  return {"items":[feed_json(r) for r in rows]}
 
@@ -556,7 +579,7 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
     return {"ok":True,"id":nearby["id"],"status":"published" if count>=3 else "pending","message":"Отметка подтверждена сообществом." if count>=3 else "Твоя отметка добавлена к сообщению. Проверка сообщества продолжается."}
    row=await c.fetchrow("INSERT INTO reports(author_id,city,category,description,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",u["telegram_id"],city,body.category,desc,lat,lon)
    await c.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",row["id"],u["telegram_id"])
- return {"ok":True,"id":row["id"],"status":"pending","message":"Отметка появилась на карте. Если в течение 3 минут её не подтвердят другие участники, она исчезнет автоматически."}
+ return {"ok":True,"id":row["id"],"status":"pending","message":"Отметка появилась на карте. Если в течение 5 минут её не подтвердят другие участники, она исчезнет автоматически."}
 
 @app.post("/api/reports/{report_id}/confirm")
 async def confirm_report(report_id:int,authorization:str|None=Header(default=None)):
