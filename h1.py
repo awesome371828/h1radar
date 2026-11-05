@@ -40,7 +40,7 @@ def normalize_webapp_url(value: str | None) -> str:
  return urlunsplit(("https",parts.netloc,parts.path.rstrip("/"),parts.query,parts.fragment))
 
 WEBAPP_URL=normalize_webapp_url(os.getenv("WEBAPP_URL","https://map.h1radar.relaxdev.ru"))
-MAP_URL=os.getenv("MAP_URL","https://map.h1radar.relaxdev.ru").strip().rstrip("/")
+MAP_URL=os.getenv("MAP_URL","https://h1radar.relaxdev.ru").strip().rstrip("/")
 log.info("Public H1 RADAR map URL: %s", MAP_URL)
 DATABASE_URL=os.environ["DATABASE_URL"]
 BOT_USERNAME=os.getenv("BOT_USERNAME","").lstrip("@")
