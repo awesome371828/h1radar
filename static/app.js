@@ -1,17 +1,4 @@
-const tg=window.Telegram?.WebApp;
-if(tg){
-  try{
-    tg.ready();
-    tg.expand();
-    tg.setHeaderColor?.("#071426");
-    tg.setBackgroundColor?.("#071426");
-    tg.disableVerticalSwipes?.();
-    if(tg.isVersionAtLeast?.("8.0") && tg.requestFullscreen){
-      tg.requestFullscreen();
-    }
-  }catch(e){console.debug("Telegram Mini App UI fallback",e)}
-}
-const API=location.origin+"/api";let auth=tg?.initData? "tma "+tg.initData:"";let me=null,map=null,cities=[],items=[];
+const API=location.origin+"/api";let auth=localStorage.getItem("h1_session")? "Bearer "+localStorage.getItem("h1_session"):"";let me=null,map=null,cities=[],items=[];
 const $=id=>document.getElementById(id);const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 async function api(path,opts={}){const r=await fetch(API+path,{...opts,headers:{"Content-Type":"application/json","Authorization":auth,...opts.headers}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.detail||"Ошибка запроса");return d}
 function toast(s){$("toast").textContent=s;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2600)}
