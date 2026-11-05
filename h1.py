@@ -618,7 +618,7 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
      WHERE status='pending' AND city=$1 AND category=$2
      AND latitude BETWEEN $3-0.015 AND $3+0.015
      AND longitude BETWEEN $4-0.02 AND $4+0.02
-     AND created_at>now()-interval '3 minutes'
+     AND created_at>now()-interval '5 minutes'
      ORDER BY created_at DESC LIMIT 1 FOR UPDATE""",city,body.category,lat,lon)
    if nearby:
     if nearby["author_id"]==u["telegram_id"]:
