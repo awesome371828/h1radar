@@ -424,8 +424,8 @@ async def cities():
 async def feed(city:str|None=None,limit:int=50,hours:int=24):
  limit=max(1,min(limit,100)); hours=max(1,min(hours,720))
  # Pending marks are visible to everyone for their three-minute confirmation window.
- if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND city=$1 AND created_at>=now()-($2::text||' hours')::interval ORDER BY created_at DESC LIMIT $3",city,str(hours),limit)
- else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND created_at>=now()-($1::text||' hours')::interval ORDER BY created_at DESC LIMIT $2",str(hours),limit)
+ if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND city=$1 AND created_at>=now()-make_interval(hours=>$2) ORDER BY created_at DESC LIMIT $3",city,hours,limit)
+ else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND created_at>=now()-make_interval(hours=>$1) ORDER BY created_at DESC LIMIT $2",hours,limit)
  return {"items":[feed_json(r) for r in rows]}
 
 @app.post("/api/reports")
@@ -461,10 +461,10 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
     await c.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",nearby["id"],u["telegram_id"])
     count=await c.fetchval("SELECT count(*) FROM report_confirmations WHERE report_id=$1",nearby["id"])
     await c.execute("UPDATE reports SET confirmations=$2,status=CASE WHEN $2>=3 THEN 'published' ELSE status END,reviewed_at=CASE WHEN $2>=3 THEN now() ELSE reviewed_at END WHERE id=$1",nearby["id"],count)
-    return {"ok":True,"id":nearby["id"],"status":"published" if count>=3 else "pending","confirmations":count,"message":"Отметка подтверждена и опубликована." if count>=3 else f"Ты подтвердил отметку. Сейчас подтверждений: {count}/3."}
+    return {"ok":True,"id":nearby["id"],"status":"published" if count>=3 else "pending","message":"Отметка подтверждена сообществом." if count>=3 else "Твоя отметка добавлена к сообщению. Проверка сообщества продолжается."}
    row=await c.fetchrow("INSERT INTO reports(author_id,city,category,description,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",u["telegram_id"],city,body.category,desc,lat,lon)
    await c.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",row["id"],u["telegram_id"])
- return {"ok":True,"id":row["id"],"status":"pending","confirmations":1,"message":"Отметка сохранена. Она появится после отметок ещё двух разных людей рядом или проверки модератором."}
+ return {"ok":True,"id":row["id"],"status":"pending","message":"Отметка появилась на карте. Если в течение 3 минут её не подтвердят другие участники, она исчезнет автоматически."}
 
 @app.post("/api/reports/{report_id}/confirm")
 async def confirm_report(report_id:int,authorization:str|None=Header(default=None)):
