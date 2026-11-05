@@ -357,6 +357,23 @@ async def mod_reports(authorization:str|None=Header(default=None)):
  rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.created_at,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='pending' ORDER BY r.created_at LIMIT 100")
  return {"items":[{**feed_json(r),"author_code":r["public_code"]} for r in rows]}
 
+@app.get("/api/moderation/events")
+async def mod_events(authorization:str|None=Header(default=None),q:str="",hours:int=168):
+ await moderator(authorization)
+ hours=max(1,min(hours,720)); q=q.strip()
+ rows=await pool.fetch("""SELECT r.id,r.city,r.category,r.description,r.latitude,r.longitude,r.confirmations,r.status,r.created_at,u.public_code,u.username,u.telegram_id
+ FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id
+ WHERE r.created_at>=now()-($1::text||' hours')::interval
+ AND ($2='' OR r.city ILIKE $3 OR r.category ILIKE $3 OR r.description ILIKE $3 OR u.username ILIKE $3 OR u.public_code ILIKE $3)
+ ORDER BY r.created_at DESC LIMIT 500""",hours,q,"%"+q+"%")
+ return {"items":[{**feed_json(r),"status":r["status"],"author_code":r["public_code"],"username":r["username"],"telegram_id":r["telegram_id"]} for r in rows]}
+
+@app.get("/api/moderation/marks")
+async def mod_marks(authorization:str|None=Header(default=None),city:str|None=None):
+ await moderator(authorization)
+ rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,status,created_at FROM reports WHERE status='published' AND ($1::text IS NULL OR city=$1) ORDER BY created_at DESC LIMIT 500",city)
+ return {"items":[{**feed_json(r),"status":r["status"]} for r in rows]}
+
 @app.post("/api/moderation/reports/{report_id}/{decision}")
 async def review(report_id:int,decision:str,authorization:str|None=Header(default=None)):
  actor=await moderator(authorization)
