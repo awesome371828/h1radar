@@ -171,7 +171,7 @@ async def moderator(auth:str|None):
  return row
 
 def user_json(r):
- return {"id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else None,"name":r["display_name"],
+ return {"id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],
  "code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()}
 
 def feed_json(r):
@@ -252,11 +252,17 @@ async def index(request:Request):
     host=request.headers.get("host","").split(":")[0].lower()
     if host.startswith("moder."):
         return FileResponse("static/moderation.html")
-    return FileResponse("static/index.html")
+    if host.startswith("map."):
+        return FileResponse("static/index.html")
+    return FileResponse("static/home.html")
 
 @app.get("/map")
 async def map_page():
     return FileResponse("static/index.html")
+
+@app.get("/moderation")
+async def moderation_page():
+    return FileResponse("static/moderation.html")
 
 
 class ReportIn(BaseModel):
@@ -370,7 +376,7 @@ async def mod_users(authorization:str|None=Header(default=None),q:str=""):
  if q:
   rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at FROM users WHERE public_code ILIKE $1 OR username ILIKE $1 OR display_name ILIKE $1 ORDER BY created_at DESC LIMIT 50","%"+q+"%")
  else: rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at FROM users ORDER BY created_at DESC LIMIT 50")
- return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else None,"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()} for r in rows]}
+ return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()} for r in rows]}
 
 @app.post("/api/moderation/users/{telegram_id}/role/{role}")
 async def set_role(telegram_id:int,role:str,authorization:str|None=Header(default=None)):
