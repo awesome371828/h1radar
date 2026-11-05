@@ -658,39 +658,43 @@ async def assign_city_moderator(body:dict,authorization:str|None=Header(default=
 
 @app.get("/api/moderation/summary")
 async def mod_summary(authorization:str|None=Header(default=None)):
- await moderator(authorization)
+ await moderator(authorization,"statistics")
  return {"pending":await pool.fetchval("SELECT count(*) FROM reports WHERE status='pending'"),
  "users":await pool.fetchval("SELECT count(*) FROM users"),
  "published":await pool.fetchval("SELECT count(*) FROM reports WHERE status='published'" ),"today_users":await pool.fetchval("SELECT count(*) FROM users WHERE created_at>=date_trunc('day',now())"),"today_events":await pool.fetchval("SELECT count(*) FROM reports WHERE created_at>=date_trunc('day',now())"),"online":await pool.fetchval("SELECT count(*) FROM users WHERE last_seen_at>now()-interval '15 minutes'")}
 
 @app.get("/api/moderation/reports")
 async def mod_reports(authorization:str|None=Header(default=None)):
- await moderator(authorization)
+ await moderator(authorization,"events")
  rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.created_at,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='pending' ORDER BY r.created_at LIMIT 100")
  return {"items":[{**feed_json(r),"author_code":r["public_code"]} for r in rows]}
 
 @app.get("/api/moderation/events")
 async def mod_events(authorization:str|None=Header(default=None),q:str="",hours:int=168):
- await moderator(authorization)
+ actor=await moderator(authorization,"events")
  hours=max(1,min(hours,720)); q=q.strip()
  rows=await pool.fetch("""SELECT r.id,r.city,r.category,r.description,r.latitude,r.longitude,r.confirmations,r.status,r.created_at,u.public_code,u.username,u.telegram_id
  FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id
  WHERE r.created_at>=now()-($1::text||' hours')::interval
  AND ($2='' OR r.city ILIKE $3 OR r.category ILIKE $3 OR r.description ILIKE $3 OR u.username ILIKE $3 OR u.public_code ILIKE $3)
- ORDER BY r.created_at DESC LIMIT 500""",str(hours),q,"%"+q+"%")
+ AND ($4 OR EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$5 AND p.permission='events' AND c.name=r.city))
+ ORDER BY r.created_at DESC LIMIT 500""",str(hours),q,"%"+q+"%",actor["role"]=="owner",actor["telegram_id"])
  return {"items":[{**feed_json(r),"status":r["status"],"author_code":r["public_code"],"username":r["username"],"telegram_id":r["telegram_id"]} for r in rows]}
 
 @app.get("/api/moderation/marks")
 async def mod_marks(authorization:str|None=Header(default=None),city:str|None=None):
- await moderator(authorization)
- rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.latitude,r.longitude,r.confirmations,r.status,r.created_at,u.public_code,u.username,u.telegram_id FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='published' AND ($1::text IS NULL OR r.city=$1) ORDER BY r.created_at DESC LIMIT 500",city)
+ actor=await moderator(authorization,"marks",city)
+ rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.latitude,r.longitude,r.confirmations,r.status,r.created_at,u.public_code,u.username,u.telegram_id FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='published' AND ($1::text IS NULL OR r.city=$1) AND ($2 OR EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$3 AND p.permission='marks' AND c.name=r.city)) ORDER BY r.created_at DESC LIMIT 500",city,actor["role"]=="owner",actor["telegram_id"])
  return {"items":[{**feed_json(r),"status":r["status"],"author_code":r["public_code"],"username":r["username"],"telegram_id":r["telegram_id"]} for r in rows]}
 
 @app.post("/api/moderation/reports/{report_id}/{decision}")
 async def review(report_id:int,decision:str,authorization:str|None=Header(default=None)):
- actor=await moderator(authorization)
+ actor=await moderator(authorization,"events")
  if decision not in ("publish","reject"): raise HTTPException(400,"Недопустимое решение.")
  status="published" if decision=="publish" else "rejected"
+ city=await pool.fetchval("SELECT city FROM reports WHERE id=$1",report_id)
+ if not city: raise HTTPException(404,"Сообщение не найдено.")
+ await require_permission(actor,"events",city)
  async with pool.acquire() as c:
   async with c.transaction():
    result=await c.execute("UPDATE reports SET status=$1,moderator_id=$2,reviewed_at=now() WHERE id=$3 AND status='pending'",status,actor["telegram_id"],report_id)
@@ -700,7 +704,7 @@ async def review(report_id:int,decision:str,authorization:str|None=Header(defaul
 
 @app.get("/api/moderation/users")
 async def mod_users(authorization:str|None=Header(default=None),q:str=""):
- await moderator(authorization)
+ await moderator(authorization,"people")
  q=q.strip()
  if q:
   rows=await pool.fetch("""SELECT u.telegram_id,u.username,u.display_name,u.public_code,u.role,u.created_at,u.last_seen_at,
@@ -756,11 +760,12 @@ async def city_chat_send(body:dict,authorization:str|None=Header(default=None)):
 
 @app.delete("/api/moderation/chat/{message_id}")
 async def moderation_delete_chat(message_id:int,authorization:str|None=Header(default=None)):
- actor=await moderator(authorization)
+ actor=await moderator(authorization,"support")
  async with pool.acquire() as c:
   async with c.transaction():
    row=await c.fetchrow("SELECT city,telegram_id,message FROM city_chat_messages WHERE id=$1 FOR UPDATE",message_id)
    if not row: raise HTTPException(404,"Сообщение уже удалено или не найдено.")
+   await require_permission(actor,"support",row["city"])
    await c.execute("DELETE FROM city_chat_messages WHERE id=$1",message_id)
    await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'chat_message_deleted',$2,$3)",actor["telegram_id"],row["telegram_id"],"Город: "+row["city"]+" · сообщение #"+str(message_id))
  return {"ok":True}
@@ -810,12 +815,13 @@ async def moderation_city_update(city_id:int,body:dict,authorization:str|None=He
 
 @app.get("/api/moderation/chat")
 async def moderation_city_chat(authorization:str|None=Header(default=None),city:str|None=None,q:str=""):
- await moderator(authorization)
+ actor=await moderator(authorization,"support",city)
  q=q.strip()
  rows=await pool.fetch("""SELECT m.id,m.city,m.telegram_id,m.username,m.display_name,m.message,m.created_at
  FROM city_chat_messages m WHERE ($1::text IS NULL OR m.city=$1)
  AND ($2='' OR m.message ILIKE $3 OR m.username ILIKE $3 OR m.display_name ILIKE $3)
- ORDER BY m.created_at DESC LIMIT 500""",city,q,"%"+q+"%")
+ AND ($4 OR EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$5 AND p.permission='support' AND c.name=m.city))
+ ORDER BY m.created_at DESC LIMIT 500""",city,q,"%"+q+"%",actor["role"]=="owner",actor["telegram_id"])
  return {"items":[{"id":r["id"],"city":r["city"],"telegram_id":r["telegram_id"],"username":r["username"],"name":r["display_name"],"message":r["message"],"created_at":r["created_at"].isoformat()} for r in rows]}
 
 @app.post("/api/moderation/users/{telegram_id}/restriction")
@@ -846,7 +852,7 @@ async def moderation_user_unrestrict(telegram_id:int,authorization:str|None=Head
 
 @app.get("/api/moderation/city-requests")
 async def moderation_city_requests(authorization:str|None=Header(default=None),status:str="pending"):
- await moderator(authorization)
+ await moderator(authorization,"beta")
  if status not in ("pending","approved","rejected","all"): raise HTTPException(400,"Недопустимый статус.")
  rows=await pool.fetch("""SELECT cr.*,u.public_code,u.username FROM city_requests cr LEFT JOIN users u ON u.telegram_id=cr.telegram_id
  WHERE ($1='all' OR cr.status=$1) ORDER BY cr.created_at DESC LIMIT 500""",status)
@@ -866,8 +872,7 @@ async def submit_city_request(body:dict,authorization:str|None=Header(default=No
 
 @app.post("/api/moderation/city-requests/{request_id}/{decision}")
 async def moderation_city_request_decide(request_id:int,decision:str,authorization:str|None=Header(default=None)):
- actor=await moderator(authorization)
- if actor["role"]!="owner": raise HTTPException(403,"Рассматривать заявки может только владелец.")
+ actor=await moderator(authorization,"beta")
  if decision not in ("approve","reject"): raise HTTPException(400,"Недопустимое решение.")
  async with pool.acquire() as c:
   async with c.transaction():
@@ -882,7 +887,7 @@ async def moderation_city_request_decide(request_id:int,decision:str,authorizati
 
 @app.get("/api/moderation/log")
 async def mod_log(authorization:str|None=Header(default=None)):
- await moderator(authorization)
+ await moderator(authorization,"statistics")
  rows=await pool.fetch("SELECT actor_id,action,target_id,details,created_at FROM moderation_log ORDER BY created_at DESC LIMIT 100")
  return {"items":[{"actor":r["actor_id"],"action":r["action"],"target":r["target_id"],"details":r["details"],"created_at":r["created_at"].isoformat()} for r in rows]}
 
