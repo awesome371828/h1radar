@@ -551,9 +551,16 @@ async def mod_users(authorization:str|None=Header(default=None),q:str=""):
  await moderator(authorization)
  q=q.strip()
  if q:
-  rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at,last_seen_at FROM users WHERE public_code ILIKE $1 OR username ILIKE $1 OR display_name ILIKE $1 OR telegram_id::text ILIKE $1 ORDER BY created_at DESC LIMIT 500","%"+q+"%")
- else: rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at,last_seen_at FROM users ORDER BY created_at DESC LIMIT 500")
- return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat(),"last_seen_at":r["last_seen_at"].isoformat(),"online":r["last_seen_at"]>datetime.now(timezone.utc)-timedelta(minutes=15)} for r in rows]}
+  rows=await pool.fetch("""SELECT u.telegram_id,u.username,u.display_name,u.public_code,u.role,u.created_at,u.last_seen_at,
+   (ur.telegram_id IS NOT NULL AND (ur.expires_at IS NULL OR ur.expires_at>now())) AS restricted,
+   ur.reason AS restriction_reason,ur.expires_at AS restriction_expires_at
+   FROM users u LEFT JOIN user_restrictions ur ON ur.telegram_id=u.telegram_id
+   WHERE u.public_code ILIKE $1 OR u.username ILIKE $1 OR u.display_name ILIKE $1 OR u.telegram_id::text ILIKE $1 ORDER BY u.created_at DESC LIMIT 500""","%"+q+"%")
+ else: rows=await pool.fetch("""SELECT u.telegram_id,u.username,u.display_name,u.public_code,u.role,u.created_at,u.last_seen_at,
+  (ur.telegram_id IS NOT NULL AND (ur.expires_at IS NULL OR ur.expires_at>now())) AS restricted,
+  ur.reason AS restriction_reason,ur.expires_at AS restriction_expires_at
+  FROM users u LEFT JOIN user_restrictions ur ON ur.telegram_id=u.telegram_id ORDER BY u.created_at DESC LIMIT 500""")
+ return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat(),"last_seen_at":r["last_seen_at"].isoformat(),"online":r["last_seen_at"]>datetime.now(timezone.utc)-timedelta(minutes=15),"restricted":r["restricted"],"restriction_reason":r["restriction_reason"],"restriction_expires_at":r["restriction_expires_at"].isoformat() if r["restriction_expires_at"] else None} for r in rows]}
 
 @app.post("/api/moderation/users/{telegram_id}/role/{role}")
 async def set_role(telegram_id:int,role:str,authorization:str|None=Header(default=None)):
