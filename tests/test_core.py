@@ -127,5 +127,35 @@ class ModerationExpansionTests(unittest.TestCase):
         self.assertIn('id="cityListToggle"', home)
 
 
+
+class MandatorySignInTests(unittest.TestCase):
+    def test_map_data_routes_require_auth_and_public_city_directory_is_separate(self):
+        from pathlib import Path
+        backend = (Path(__file__).resolve().parents[1] / "h1.py").read_text(encoding="utf-8")
+        self.assertIn('@app.get("/api/public/cities")', backend)
+        self.assertIn('async def cities(authorization:str|None=Header(default=None)):', backend)
+        self.assertIn('async def feed(city:str|None=None,limit:int=50,hours:int=24,authorization:str|None=Header(default=None)):', backend)
+        self.assertIn('async def city_chat(city:str,after:int=0,authorization:str|None=Header(default=None)):', backend)
+
+    def test_map_is_hidden_until_telegram_login(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        index = (root / "static" / "index.html").read_text(encoding="utf-8")
+        app_js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        css = (root / "static" / "style.css").read_text(encoding="utf-8")
+        self.assertIn('class="auth-locked"', index)
+        self.assertIn('id="authGate"', index)
+        self.assertIn('id="gateLogin"', index)
+        self.assertIn('async function startMapApp()', app_js)
+        self.assertIn('.auth-locked .app', css)
+        self.assertIn('API+"/auth/poll?', app_js)
+
+    def test_h1_brand_assets_exist(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        self.assertTrue((root / "static" / "favicon.svg").exists())
+        self.assertTrue((root / "static" / "h1-avatar.svg").exists())
+
+
 if __name__ == "__main__":
     unittest.main()
