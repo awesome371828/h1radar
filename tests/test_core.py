@@ -48,6 +48,17 @@ class PhoneValidationTests(unittest.TestCase):
         self.assertIsNone(h1.ru_phone("+49 151 12345678"))
 
 
+class RussiaGeofenceTests(unittest.TestCase):
+    def test_accepts_moscow(self):
+        self.assertTrue(h1.point_in_russia(37.6173, 55.7558))
+
+    def test_accepts_bataysk(self):
+        self.assertTrue(h1.point_in_russia(39.75, 47.14))
+
+    def test_rejects_valencia(self):
+        self.assertFalse(h1.point_in_russia(-0.3763, 39.4699))
+
+
 class TelegramInitDataTests(unittest.TestCase):
     def test_valid_signature(self):
         result = h1.verify_init_data(signed_init_data())
