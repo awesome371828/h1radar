@@ -208,7 +208,7 @@ async def start(m:Message):
    await m.answer("Вход подтверждён. Возвращайтесь во вкладку браузера — сайт завершит авторизацию автоматически.",reply_markup=app_kb())
    return
  greeting="Аккаунт H1 RADAR создан." if fresh else "С возвращением в H1 RADAR."
- await m.answer(f"{greeting}\\nВаш код: <b>{code}</b>\\n\\nКарта открывается в обычном браузере — без Telegram Mini App.",reply_markup=app_kb(),parse_mode="HTML")
+ await m.answer(f"{greeting}\nВаш код: <b>{code}</b>\n\nКарта открывается в обычном браузере — без Telegram Mini App.",reply_markup=app_kb(),parse_mode="HTML")
 
 @dp.message(Command("radar"))
 async def radar(m:Message):
