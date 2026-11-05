@@ -359,7 +359,7 @@ async def mod_users(authorization:str|None=Header(default=None),q:str=""):
  if q:
   rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at FROM users WHERE public_code ILIKE $1 OR username ILIKE $1 OR display_name ILIKE $1 ORDER BY created_at DESC LIMIT 50","%"+q+"%")
  else: rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at FROM users ORDER BY created_at DESC LIMIT 50")
- return {"items":[{"id":r["telegram_id"],"username":r["username"],"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()} for r in rows]}
+ return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else None,"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()} for r in rows]}
 
 @app.post("/api/moderation/users/{telegram_id}/role/{role}")
 async def set_role(telegram_id:int,role:str,authorization:str|None=Header(default=None)):
