@@ -243,3 +243,5 @@ body.side-collapsed .maptools{left:18px}
 @keyframes authRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:560px){.auth-gate{padding:12px}.auth-card{padding:25px 21px;border-radius:22px}.auth-kicker{margin-top:30px}.auth-card h1{font-size:34px}}
 @media(prefers-reduced-motion:reduce){.auth-card{animation:none}.auth-submit{transition:none}}
+
+.auth-submit:disabled{opacity:.62;cursor:wait;transform:none;box-shadow:none}
