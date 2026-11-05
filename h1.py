@@ -328,20 +328,39 @@ async def configure_bot_profile(b:Bot):
   except Exception:
    log.exception("Telegram bot profile setting failed: %s",label)
  await asyncio.gather(*(apply_setting(label,operation) for label,operation in operations))
- # Устанавливаем фирменный аватар из SVG-исходника проекта. Конвертация в JPG нужна по требованиям Bot API.
+ # Рисуем JPG-аватар в фирменном стиле H1. Bot API принимает профильное фото именно в JPG.
  try:
-  import cairosvg
-  from PIL import Image
+  from PIL import Image,ImageDraw,ImageFont
   from io import BytesIO
   from aiogram.types import BufferedInputFile,InputProfilePhotoStatic
-  avatar_svg=Path("static/h1-avatar.svg")
-  if avatar_svg.is_file():
-   png=cairosvg.svg2png(url=str(avatar_svg),output_width=512,output_height=512)
+  if Path("static/h1-avatar.svg").is_file():
+   size=512
+   image=Image.new("RGB",(size,size))
+   pixels=image.load()
+   for y in range(size):
+    for x in range(size):
+     t=(x+y)/(2*(size-1))
+     pixels[x,y]=(int(18*(1-t)+6*t),int(62*(1-t)+17*t),int(88*(1-t)+31*t))
+   draw=ImageDraw.Draw(image)
+   draw.rounded_rectangle((18,18,494,494),radius=104,outline=(117,223,210),width=4)
+   for radius,alpha in ((178,85),(143,55)):
+    box=(256-radius,248-radius,256+radius,248+radius)
+    draw.ellipse(box,outline=(105,210,202),width=3)
+   draw.line((256,248,390,116),fill=(158,244,224),width=5)
+   draw.ellipse((379,105,401,127),fill=(169,245,228))
+   draw.ellipse((248,240,264,256),fill=(169,245,228))
+   font_dir=os.path.join(os.path.dirname(ImageFont.__file__),"fonts")
+   title_font=ImageFont.truetype(os.path.join(font_dir,"DejaVuSans-Bold.ttf"),150)
+   small_font=ImageFont.truetype(os.path.join(font_dir,"DejaVuSans-Bold.ttf"),27)
+   title="H1"; box=draw.textbbox((0,0),title,font=title_font)
+   draw.text(((size-(box[2]-box[0]))/2,160),title,font=title_font,fill=(207,255,241),stroke_width=1,stroke_fill=(106,192,205))
+   subtitle="R A D A R"; box=draw.textbbox((0,0),subtitle,font=small_font)
+   draw.text(((size-(box[2]-box[0]))/2,383),subtitle,font=small_font,fill=(142,219,215))
    jpg=BytesIO()
-   Image.open(BytesIO(png)).convert("RGB").save(jpg,format="JPEG",quality=94,optimize=True)
+   image.save(jpg,format="JPEG",quality=94,optimize=True)
    photo=BufferedInputFile(jpg.getvalue(),filename="h1-radar-avatar.jpg")
    await asyncio.wait_for(b.set_my_profile_photo(photo=InputProfilePhotoStatic(photo=photo)),timeout=15)
-   log.info("Telegram bot profile photo updated from static/h1-avatar.svg")
+   log.info("Telegram bot profile photo updated with H1 RADAR avatar")
   else:
    log.warning("Bot avatar source static/h1-avatar.svg is missing")
  except asyncio.CancelledError:
