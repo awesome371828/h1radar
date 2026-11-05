@@ -23,7 +23,7 @@ def normalize_webapp_url(value: str | None) -> str:
  if raw.startswith("//"): raw="https:"+raw
  elif raw.startswith("http://"): raw="https://"+raw[7:]
  elif not raw.lower().startswith("https://"): raw="https://"+raw
- if not re.match(r"^https://[a-z0-9.-]+(?::[0-9]+)?(?:/[^\\s]*)?$",raw,re.I):
+ if not re.match(r"^https://[^/\\s]+(?:/.*)?$",raw,re.I):
   raise ValueError("WEBAPP_URL must be a valid public HTTPS URL")
  return raw
 
