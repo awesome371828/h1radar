@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio, hashlib, hmac, json, logging, os, re, secrets, string, time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 import asyncpg
@@ -295,14 +296,15 @@ async def configure_bot_profile(b:Bot):
   ("commands",lambda:b.set_my_commands([BotCommand(command="start",description="Открыть H1 RADAR"),BotCommand(command="help",description="Помощь")])),
   ("menu_button",lambda:b.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть H1 RADAR",web_app=WebAppInfo(url=MAP_URL)))),
  ]
- for label,operation in operations:
+ async def apply_setting(label,operation):
   try:
-   await asyncio.wait_for(operation(),timeout=10)
+   await asyncio.wait_for(operation(),timeout=8)
    log.info("Telegram bot profile setting applied: %s",label)
   except asyncio.CancelledError:
    raise
   except Exception:
    log.exception("Telegram bot profile setting failed: %s",label)
+ await asyncio.gather(*(apply_setting(label,operation) for label,operation in operations))
  # Устанавливаем фирменный аватар из SVG-исходника проекта. Конвертация в JPG нужна по требованиям Bot API.
  try:
   import cairosvg
