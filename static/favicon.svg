@@ -1,7 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#174c67"/><stop offset="1" stop-color="#071525"/></linearGradient><linearGradient id="a" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#c4fff0"/><stop offset="1" stop-color="#7ed9ee"/></linearGradient></defs>
-<rect x="2" y="2" width="60" height="60" rx="17" fill="url(#g)" stroke="#75dfd2" stroke-width="1.5"/>
-<circle cx="32" cy="32" r="22" fill="none" stroke="#79dccc" stroke-opacity=".25"/><circle cx="32" cy="32" r="16" fill="none" stroke="#79dccc" stroke-opacity=".22"/>
-<path d="M32 32 49 16" stroke="#8debdc" stroke-width="2.2" stroke-linecap="round"/><circle cx="49" cy="16" r="3" fill="#baffed"/>
-<text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="800" fill="url(#a)">H1</text>
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#174c67"/><stop offset=".52" stop-color="#0b2943"/><stop offset="1" stop-color="#061321"/></linearGradient>
+ <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d7fff1"/><stop offset="1" stop-color="#74d9d2"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#62d9c8" stop-opacity=".3"/><stop offset="1" stop-color="#62d9c8" stop-opacity="0"/></radialGradient>
+</defs>
+<rect x="1.5" y="1.5" width="61" height="61" rx="18" fill="url(#bg)" stroke="#8ce7d8" stroke-opacity=".72"/>
+<circle cx="32" cy="31" r="27" fill="url(#glow)"/>
+<circle cx="32" cy="31" r="23" fill="none" stroke="#8ce7d8" stroke-opacity=".26"/>
+<circle cx="32" cy="31" r="16" fill="none" stroke="#8ce7d8" stroke-opacity=".2"/>
+<path d="M32 31 49 14" stroke="#b9ffea" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="49" cy="14" r="3" fill="#d7fff1"/>
+<text x="32" y="39" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="800" letter-spacing="-1.2" fill="url(#mint)">H1</text>
 </svg>
