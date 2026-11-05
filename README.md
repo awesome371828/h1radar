@@ -1,6 +1,6 @@
 # H1 RADAR
 
-Telegram bot + browser-based civic map and moderated community reports. The map is a regular website, not a Telegram Mini App.
+Telegram bot + browser-based civic map and moderated community reports. The map is a regular website protected by mandatory Telegram sign-in. The bot also exposes a Telegram Web App menu shortcut.
 
 ## Runtime
 - Python 3.12, aiogram 3, FastAPI, asyncpg, PostgreSQL.
@@ -25,7 +25,8 @@ or build the included Dockerfile.
 `/start` creates the user's account and assigns a random RU-XXXX code. The bot sends an ordinary HTTPS URL button below its message; it does not use a reply keyboard, Web App button, or Telegram Mini App. Browser login uses a short-lived one-time deep-link challenge and a server-side session token.
 
 ## Commands
-- `/start` create account / open the map
+- `/start` create account / confirm a browser sign-in / open the map
+- `/help` sign-in instructions
 - `/help` help with sign-in and using the map
 
 ## API
@@ -59,10 +60,20 @@ This initial implementation is a civic reporting platform, not an authoritative 
 
 ## Current interface capabilities
 - The main landing page is an original H1 visual system with live public aggregate counters, searchable/collapsible city directory, Moscow-time clock, FAQ and publication workflow.
-- The map updates the public feed every 15 seconds while visible, displays timestamps in Europe/Moscow, supports live/history modes, city filtering, city chat, collapsible side panel and browser notifications for new published reports while the page is open.
+- The map requires a verified Telegram session before rendering the map or loading city/feed/chat data. The landing page exposes only aggregate statistics and a public city directory. The authenticated map updates its feed every 15 seconds while visible, displays timestamps in Europe/Moscow, supports live/history modes, city filtering, city chat, collapsible side panel and browser notifications for new published reports while the page is open.
 - A report is submitted immediately after the user selects a category and taps a point inside Russia; there is no second manual submit button. Geolocation selection also submits directly.
 - User profiles show a public code, role, join date and personal activity totals. City suggestions are submitted for owner review.
 - Moderation includes city catalog editing, city-request review, account restrictions and city-chat message search/deletion.
 - Browser notifications are page-session notifications, not server push; they work while the map tab is open and permission is granted.
 
 The interface is a feature-level H1 implementation, not a literal copy of GDE.WTF. Military tracking, live operational positions, weapon/PVO targeting data and other sensitive operational features are intentionally not implemented. H1 is a civil community-reporting service and is not an official emergency alert source.
+
+
+## Обязательный вход и оформление
+
+- Страница карты закрыта полноэкранным экраном входа до подтверждения Telegram-аккаунта.
+- API городов, ленты и чтения городского чата требуют Bearer-сессию; для главной страницы предусмотрен отдельный публичный каталог без координат.
+- После подтверждения одноразовой ссылки карта открывается автоматически. Сессия действует 30 дней.
+- Бот показывает кнопку Web App «Открыть H1 RADAR» в меню Telegram и обновляет приветствие/справку при старте.
+- Фирменные SVG-ресурсы: `static/h1-avatar.svg` (аватар) и `static/favicon.svg` (favicon).
+- Telegram не позволяет боту менять собственную фотографию профиля через Bot API. Файл аватара подготовлен в репозитории; его нужно один раз установить в профиле бота через @BotFather.
