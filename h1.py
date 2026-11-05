@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS moderation_log(
 );
 CREATE TABLE IF NOT EXISTS user_restrictions(telegram_id BIGINT PRIMARY KEY REFERENCES users(telegram_id) ON DELETE CASCADE,reason TEXT NOT NULL DEFAULT '',expires_at TIMESTAMPTZ,created_by BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS city_requests(id BIGSERIAL PRIMARY KEY,telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,city_name TEXT NOT NULL,region TEXT NOT NULL DEFAULT '',latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),moderator_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),reviewed_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS cities(id BIGSERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,region TEXT NOT NULL DEFAULT '',latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,enabled BOOLEAN NOT NULL DEFAULT true);
 CREATE TABLE IF NOT EXISTS moderator_city_permissions(
  id BIGSERIAL PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
  city_id BIGINT NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
@@ -118,7 +119,6 @@ CREATE TABLE IF NOT EXISTS moderator_city_permissions(
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_city_ambassador_idx ON moderator_city_permissions(city_id) WHERE permission='ambassador';
 CREATE INDEX IF NOT EXISTS moderator_city_permissions_user_idx ON moderator_city_permissions(telegram_id,city_id);
-CREATE TABLE IF NOT EXISTS cities(id BIGSERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,region TEXT NOT NULL DEFAULT '',latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,enabled BOOLEAN NOT NULL DEFAULT true);
 INSERT INTO cities(name,region,latitude,longitude) VALUES
 ('Москва','Москва',55.7558,37.6173),
 ('Санкт-Петербург','Санкт-Петербург',59.9343,30.3351),
