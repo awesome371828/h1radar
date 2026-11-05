@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS moderation_log(
  id BIGSERIAL PRIMARY KEY, actor_id BIGINT NOT NULL, action TEXT NOT NULL,
  target_id BIGINT, details TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS user_restrictions(telegram_id BIGINT PRIMARY KEY REFERENCES users(telegram_id) ON DELETE CASCADE,reason TEXT NOT NULL DEFAULT '',expires_at TIMESTAMPTZ,created_by BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS city_requests(id BIGSERIAL PRIMARY KEY,telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,city_name TEXT NOT NULL,region TEXT NOT NULL DEFAULT '',latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),moderator_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),reviewed_at TIMESTAMPTZ);
 CREATE TABLE IF NOT EXISTS cities(id BIGSERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,region TEXT NOT NULL DEFAULT '',latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,enabled BOOLEAN NOT NULL DEFAULT true);
 INSERT INTO cities(name,region,latitude,longitude) VALUES
 ('Москва','Москва',55.7558,37.6173),
@@ -244,6 +246,10 @@ async def current_user(auth:str|None):
  token_hash=hashlib.sha256(token.encode()).hexdigest()
  row=await pool.fetchrow("SELECT u.* FROM web_sessions s JOIN users u ON u.telegram_id=s.telegram_id WHERE s.token_hash=$1 AND s.expires_at>now()",token_hash)
  if not row: raise HTTPException(401,"Сессия истекла. Войдите через Telegram ещё раз.")
+ restriction=await pool.fetchrow("SELECT reason,expires_at FROM user_restrictions WHERE telegram_id=$1",row["telegram_id"])
+ if restriction and (restriction["expires_at"] is None or restriction["expires_at"]>datetime.now(timezone.utc)):
+  raise HTTPException(403,"Доступ ограничен модерацией."+((" Причина: "+restriction["reason"]) if restriction["reason"] else ""))
+ if restriction: await pool.execute("DELETE FROM user_restrictions WHERE telegram_id=$1",row["telegram_id"])
  await pool.execute("UPDATE users SET last_seen_at=now() WHERE telegram_id=$1",row["telegram_id"])
  return row
 
@@ -598,6 +604,121 @@ async def moderation_delete_chat(message_id:int,authorization:str|None=Header(de
    await c.execute("DELETE FROM city_chat_messages WHERE id=$1",message_id)
    await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'chat_message_deleted',$2,$3)",actor["telegram_id"],row["telegram_id"],"Город: "+row["city"]+" · сообщение #"+str(message_id))
  return {"ok":True}
+
+
+@app.get("/api/moderation/cities")
+async def moderation_cities(authorization:str|None=Header(default=None),q:str=""):
+ await moderator(authorization)
+ q=q.strip()
+ rows=await pool.fetch("""SELECT c.id,c.name,c.region,c.latitude,c.longitude,c.enabled,
+  (SELECT count(*) FROM reports r WHERE r.city=c.name) AS reports
+  FROM cities c WHERE ($1='' OR c.name ILIKE $2 OR c.region ILIKE $2)
+  ORDER BY c.enabled DESC,c.name LIMIT 1000""",q,"%"+q+"%")
+ return {"items":[dict(r) for r in rows]}
+
+@app.post("/api/moderation/cities")
+async def moderation_city_create(body:dict,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Добавлять города может только владелец.")
+ name=str(body.get("name","")).strip(); region=str(body.get("region","")).strip()
+ lat=body.get("latitude"); lon=body.get("longitude")
+ if not name or len(name)>100 or len(region)>120: raise HTTPException(400,"Проверь название и регион.")
+ if (lat is None)!=(lon is None): raise HTTPException(400,"Координаты должны быть указаны вместе.")
+ if lat is not None and not point_in_russia(float(lon),float(lat)): raise HTTPException(400,"Координаты должны находиться в России.")
+ try:
+  row=await pool.fetchrow("INSERT INTO cities(name,region,latitude,longitude) VALUES($1,$2,$3,$4) RETURNING id,name,region,latitude,longitude,enabled",name,region,float(lat) if lat is not None else None,float(lon) if lon is not None else None)
+ except asyncpg.UniqueViolationError: raise HTTPException(409,"Такой город уже существует.")
+ await pool.execute("INSERT INTO moderation_log(actor_id,action,details) VALUES($1,'city_created',$2)",actor["telegram_id"],name)
+ return {"ok":True,"city":dict(row)}
+
+@app.patch("/api/moderation/cities/{city_id}")
+async def moderation_city_update(city_id:int,body:dict,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Изменять каталог может только владелец.")
+ old=await pool.fetchrow("SELECT * FROM cities WHERE id=$1",city_id)
+ if not old: raise HTTPException(404,"Город не найден.")
+ name=str(body.get("name",old["name"])).strip(); region=str(body.get("region",old["region"])).strip()
+ enabled=bool(body.get("enabled",old["enabled"]))
+ lat=body.get("latitude",old["latitude"]); lon=body.get("longitude",old["longitude"])
+ if not name or len(name)>100 or len(region)>120 or (lat is None)!=(lon is None): raise HTTPException(400,"Проверь поля города.")
+ if lat is not None and not point_in_russia(float(lon),float(lat)): raise HTTPException(400,"Координаты должны находиться в России.")
+ try:
+  row=await pool.fetchrow("UPDATE cities SET name=$1,region=$2,enabled=$3,latitude=$4,longitude=$5 WHERE id=$6 RETURNING id,name,region,latitude,longitude,enabled",name,region,enabled,float(lat) if lat is not None else None,float(lon) if lon is not None else None,city_id)
+ except asyncpg.UniqueViolationError: raise HTTPException(409,"Такой город уже существует.")
+ await pool.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'city_updated',$2,$3)",actor["telegram_id"],city_id,name)
+ return {"ok":True,"city":dict(row)}
+
+@app.get("/api/moderation/chat")
+async def moderation_city_chat(authorization:str|None=Header(default=None),city:str|None=None,q:str=""):
+ await moderator(authorization)
+ q=q.strip()
+ rows=await pool.fetch("""SELECT m.id,m.city,m.telegram_id,m.username,m.display_name,m.message,m.created_at
+ FROM city_chat_messages m WHERE ($1::text IS NULL OR m.city=$1)
+ AND ($2='' OR m.message ILIKE $3 OR m.username ILIKE $3 OR m.display_name ILIKE $3)
+ ORDER BY m.created_at DESC LIMIT 500""",city,q,"%"+q+"%")
+ return {"items":[{"id":r["id"],"city":r["city"],"telegram_id":r["telegram_id"],"username":r["username"],"name":r["display_name"],"message":r["message"],"created_at":r["created_at"].isoformat()} for r in rows]}
+
+@app.post("/api/moderation/users/{telegram_id}/restriction")
+async def moderation_user_restriction(telegram_id:int,body:dict,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Ограничивать аккаунты может только владелец.")
+ if telegram_id==BOT_OWNER: raise HTTPException(400,"Нельзя ограничить владельца.")
+ reason=str(body.get("reason","")).strip()[:500]; hours=body.get("hours")
+ if hours is not None:
+  try: hours=int(hours)
+  except (TypeError,ValueError): raise HTTPException(400,"Срок должен быть числом часов.")
+  if not 1<=hours<=8760: raise HTTPException(400,"Срок должен быть от 1 до 8760 часов.")
+ if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM users WHERE telegram_id=$1)",telegram_id): raise HTTPException(404,"Пользователь не найден.")
+ await pool.execute("""INSERT INTO user_restrictions(telegram_id,reason,expires_at,created_by)
+ VALUES($1,$2,CASE WHEN $3::int IS NULL THEN NULL ELSE now()+make_interval(hours=>$3) END,$4)
+ ON CONFLICT(telegram_id) DO UPDATE SET reason=EXCLUDED.reason,expires_at=EXCLUDED.expires_at,created_by=EXCLUDED.created_by,created_at=now()""",telegram_id,reason,hours,actor["telegram_id"])
+ await pool.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'user_restricted',$2,$3)",actor["telegram_id"],telegram_id,reason)
+ return {"ok":True,"restricted":True,"hours":hours}
+
+@app.delete("/api/moderation/users/{telegram_id}/restriction")
+async def moderation_user_unrestrict(telegram_id:int,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Снимать ограничения может только владелец.")
+ result=await pool.execute("DELETE FROM user_restrictions WHERE telegram_id=$1",telegram_id)
+ if result.endswith("0"): raise HTTPException(404,"Активное ограничение не найдено.")
+ await pool.execute("INSERT INTO moderation_log(actor_id,action,target_id) VALUES($1,'user_unrestricted',$2)",actor["telegram_id"],telegram_id)
+ return {"ok":True,"restricted":False}
+
+@app.get("/api/moderation/city-requests")
+async def moderation_city_requests(authorization:str|None=Header(default=None),status:str="pending"):
+ await moderator(authorization)
+ if status not in ("pending","approved","rejected","all"): raise HTTPException(400,"Недопустимый статус.")
+ rows=await pool.fetch("""SELECT cr.*,u.public_code,u.username FROM city_requests cr LEFT JOIN users u ON u.telegram_id=cr.telegram_id
+ WHERE ($1='all' OR cr.status=$1) ORDER BY cr.created_at DESC LIMIT 500""",status)
+ return {"items":[{"id":r["id"],"name":r["city_name"],"region":r["region"],"latitude":r["latitude"],"longitude":r["longitude"],"status":r["status"],"created_at":r["created_at"].isoformat(),"user_code":r["public_code"],"username":r["username"]} for r in rows]}
+
+@app.post("/api/city-requests")
+async def submit_city_request(body:dict,authorization:str|None=Header(default=None)):
+ u=await current_user(authorization)
+ name=str(body.get("name","")).strip(); region=str(body.get("region","")).strip()
+ lat=body.get("latitude"); lon=body.get("longitude")
+ if not name or len(name)>100 or len(region)>120 or (lat is None)!=(lon is None): raise HTTPException(400,"Укажи название города, регион и корректные координаты.")
+ if lat is not None and not point_in_russia(float(lon),float(lat)): raise HTTPException(400,"Город должен находиться в России.")
+ if await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE lower(name)=lower($1))",name): raise HTTPException(409,"Этот город уже есть в каталоге.")
+ if await pool.fetchval("SELECT count(*) FROM city_requests WHERE telegram_id=$1 AND created_at>now()-interval '24 hours'",u["telegram_id"])>=3: raise HTTPException(429,"Не более трёх заявок за сутки.")
+ row=await pool.fetchrow("INSERT INTO city_requests(telegram_id,city_name,region,latitude,longitude) VALUES($1,$2,$3,$4,$5) RETURNING id",u["telegram_id"],name,region,float(lat) if lat is not None else None,float(lon) if lon is not None else None)
+ return {"ok":True,"id":row["id"],"status":"pending"}
+
+@app.post("/api/moderation/city-requests/{request_id}/{decision}")
+async def moderation_city_request_decide(request_id:int,decision:str,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Рассматривать заявки может только владелец.")
+ if decision not in ("approve","reject"): raise HTTPException(400,"Недопустимое решение.")
+ async with pool.acquire() as c:
+  async with c.transaction():
+   req=await c.fetchrow("SELECT * FROM city_requests WHERE id=$1 AND status='pending' FOR UPDATE",request_id)
+   if not req: raise HTTPException(404,"Заявка уже обработана или не найдена.")
+   if decision=="approve":
+    await c.execute("INSERT INTO cities(name,region,latitude,longitude) VALUES($1,$2,$3,$4) ON CONFLICT(name) DO UPDATE SET region=EXCLUDED.region,latitude=COALESCE(EXCLUDED.latitude,cities.latitude),longitude=COALESCE(EXCLUDED.longitude,cities.longitude),enabled=true",req["city_name"],req["region"],req["latitude"],req["longitude"])
+   status="approved" if decision=="approve" else "rejected"
+   await c.execute("UPDATE city_requests SET status=$1,moderator_id=$2,reviewed_at=now() WHERE id=$3",status,actor["telegram_id"],request_id)
+   await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,$2,$3,$4)",actor["telegram_id"],"city_request_"+status,request_id,req["city_name"])
+ return {"ok":True,"status":status}
 
 @app.get("/api/moderation/log")
 async def mod_log(authorization:str|None=Header(default=None)):
