@@ -46,6 +46,7 @@ if urlsplit(MAP_URL).hostname=="h1radar.relaxdev.ru":
 log.info("Public H1 RADAR map URL: %s", MAP_URL)
 DATABASE_URL=os.environ["DATABASE_URL"]
 BOT_USERNAME=os.getenv("BOT_USERNAME","").lstrip("@")
+_auth_attempts:dict[str,list[float]]={}
 INITDATA_MAX_AGE=int(os.getenv("TG_INITDATA_MAX_AGE","86400"))
 pool: asyncpg.Pool|None=None
 bot: Bot|None=None
@@ -296,6 +297,8 @@ async def expire_pending_reports():
    if pool is not None:
     result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '3 minutes'")
     if result!="DELETE 0": log.info("Expired unconfirmed marks: %s",result)
+    await pool.execute("DELETE FROM login_challenges WHERE expires_at<now() OR consumed_at IS NOT NULL")
+    await pool.execute("DELETE FROM web_sessions WHERE expires_at<now()")
   except asyncio.CancelledError:
    raise
   except Exception:
@@ -367,7 +370,13 @@ async def public_config():
  return {"bot_username":BOT_USERNAME,"map_url":MAP_URL}
 
 @app.post("/api/auth/start")
-async def auth_start():
+async def auth_start(request:Request):
+ client_ip=request.client.host if request.client else "unknown"
+ now=time.monotonic()
+ attempts=[stamp for stamp in _auth_attempts.get(client_ip,[]) if now-stamp<600]
+ if len(attempts)>=8:
+  raise HTTPException(429,"Слишком много попыток входа. Попробуйте через несколько минут.")
+ attempts.append(now); _auth_attempts[client_ip]=attempts
  if not BOT_USERNAME: raise HTTPException(503,"Бот ещё запускается. Попробуйте снова.")
  nonce=secrets.token_urlsafe(24)
  await pool.execute("INSERT INTO login_challenges(nonce,expires_at) VALUES($1,now()+interval '10 minutes')",nonce)
@@ -416,6 +425,7 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
  async with pool.acquire() as c:
   async with c.transaction():
    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",city,body.category)
+   await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))",str(u["telegram_id"]))
    last_mark=await c.fetchval("SELECT created_at FROM reports WHERE author_id=$1 AND created_at>now()-interval '3 minutes' ORDER BY created_at DESC LIMIT 1",u["telegram_id"])
    if last_mark:
     raise HTTPException(429,"Одну отметку можно отправлять раз в 3 минуты. Попробуй немного позже.")
@@ -529,6 +539,13 @@ async def city_chat_send(body:dict,authorization:str|None=Header(default=None)):
  if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
   raise HTTPException(400,"Выберите город.")
  if not message or len(message)>1000: raise HTTPException(400,"Сообщение должно быть от 1 до 1000 символов.")
+ await pool.execute("SELECT pg_advisory_xact_lock(hashtext($1))",str(u["telegram_id"]))
+ recent=await pool.fetchval("SELECT count(*) FROM city_chat_messages WHERE telegram_id=$1 AND created_at>now()-interval '10 minutes'",u["telegram_id"])
+ last=await pool.fetchval("SELECT created_at FROM city_chat_messages WHERE telegram_id=$1 ORDER BY created_at DESC LIMIT 1",u["telegram_id"])
+ if last and (datetime.now(timezone.utc)-last).total_seconds()<2:
+  raise HTTPException(429,"Не отправляй сообщения чаще одного раза в 2 секунды.")
+ if recent>=30:
+  raise HTTPException(429,"Лимит сообщений в городском чате на 10 минут исчерпан.")
  r=await pool.fetchrow("INSERT INTO city_chat_messages(city,telegram_id,username,display_name,message) VALUES($1,$2,$3,$4,$5) RETURNING id,created_at",city,u["telegram_id"],u["username"],u["display_name"],message)
  return {"ok":True,"id":r["id"],"created_at":r["created_at"].isoformat()}
 
