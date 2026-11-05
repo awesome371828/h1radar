@@ -12,7 +12,7 @@ Telegram bot + browser-based civic map and moderated community reports. The map 
 Required: `BOT_TOKEN`, `BOT_OWNER` (numeric Telegram ID), `DATABASE_URL`. Optional: `MAP_URL` (defaults to `https://map.h1radar.relaxdev.ru`) and `BOT_USERNAME` (otherwise read from Telegram on startup).
 Optional: `PORT`, `DB_POOL_SIZE`, `LOG_LEVEL`.
 
-Point `h1radar.relaxdev.ru` and `moder.h1radar.relaxdev.ru` to this same RelaxDev service and enable HTTPS for both. The main host serves the live map; `moder.` serves the dedicated moderation dashboard. The optional `map.` hostname also serves the map. Set RelaxDev health check to `/api/health`.
+Point `h1radar.relaxdev.ru`, `map.h1radar.relaxdev.ru`, and `moder.h1radar.relaxdev.ru` to this same RelaxDev service and enable HTTPS for all three. The main host serves the landing page; `map.` serves the live map; `moder.` serves the moderation dashboard. Set RelaxDev health check to `/api/health`.
 
 ## Run
 ```bash
@@ -25,10 +25,8 @@ or build the included Dockerfile.
 `/start` creates the user's account and assigns a random RU-XXXX code. The bot sends an ordinary HTTPS URL button below its message; it does not use a reply keyboard, Web App button, or Telegram Mini App. Browser login uses a short-lived one-time deep-link challenge and a server-side session token.
 
 ## Commands
-- `/start` create account / open website
-- `/radar` open map in browser
-- `/moderation` team panel
-- `/help`
+- `/start` create account / open the map
+- `/help` help with sign-in and using the map
 
 ## API
 - `GET /api/health`, `GET /api/cities`, `GET /api/feed`, `GET /api/city-chat`, `POST /api/city-chat`
