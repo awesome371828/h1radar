@@ -27,6 +27,36 @@ input,select,textarea{background:#07192d;border:1px solid #8eb9df45;border-radiu
 .login{background:linear-gradient(145deg,#18395d,#091a30);border:1px solid #9bc4e355;border-radius:24px;box-shadow:0 30px 90px #0008}
 @media(max-width:850px){.layout{display:block;padding:7px}.nav{position:relative;top:auto;height:auto;max-height:150px;border-radius:17px}.main{padding:15px 8px}.head{top:0}.nav button{width:auto;white-space:nowrap}.nav{display:flex;flex-wrap:wrap;gap:3px}.logo{display:none}.nav .spacer,.who{display:none}}
 
+</style><style id="h1-visual-refresh">
+:root{color-scheme:dark;--bg:#101713;--panel:#18221c;--line:#34453a;--text:#f0f2e9;--muted:#9eac9f;--gold:#c8ef78;--blue:#b6d9b4;--green:#78d8b0}
+html,body{background:#101713;color:var(--text);font-family:Manrope,system-ui,sans-serif}
+body:before{background:linear-gradient(125deg,#18251c 0%,transparent 42%),repeating-linear-gradient(0deg,transparent 0 47px,#c8ef7808 48px),repeating-linear-gradient(90deg,transparent 0 47px,#c8ef7808 48px)}
+.layout{grid-template-columns:226px minmax(0,1fr);gap:0;padding:0;max-width:1900px}
+.nav{top:0;height:100dvh;border:0;border-right:1px solid #34453a;border-radius:0;background:#131d17;box-shadow:none;backdrop-filter:none;padding:20px 13px}
+.logo{font-size:15px;letter-spacing:2px;color:#f0f2e9}.logo small{color:#9eac9f}
+.nav button{border-radius:7px;color:#aebbb0;padding:10px 11px;border:0;border-left:2px solid transparent}
+.nav button.active{background:#c8ef7812;border-left-color:#c8ef78;color:#eefaeb;box-shadow:none}
+.nav button:hover{background:#ffffff0a;color:white}
+.who,.card,.hero,.stat,.city,.login{background:#18221c;border:1px solid #34453a;border-radius:10px;box-shadow:none}
+.main{max-width:1500px;padding:28px clamp(18px,3vw,46px)}
+.head{background:#101713ed;border-bottom:1px solid #34453a;padding:12px 0 17px}
+.head h1{font-size:28px;letter-spacing:-1px;font-weight:700}
+.pill{border:1px solid #78d8b055;background:#78d8b011;color:#78d8b0;border-radius:5px}
+.stats{gap:1px;background:#34453a;border:1px solid #34453a;border-radius:10px;overflow:hidden}
+.stat{background:#18221c;border:0;border-radius:0;padding:15px}
+.stat b{font-size:26px;color:#c8ef78}
+.hero{background:#202d25;border:1px solid #526451;border-radius:10px}
+.card{padding:18px;margin:12px 0}
+.quick button,.action{border:1px solid #536455;background:#202d25;border-radius:6px;color:#e4ece1}
+.quick button:hover,.action:hover{background:#2a3a2d}
+input,select,textarea{background:#111a14;border:1px solid #435545;border-radius:6px;color:#f0f2e9}
+.row{border-bottom:1px solid #34453a;padding:15px 2px}
+.row p{color:#b1bdb1}
+.row a{color:#c8ef78}
+.city{background:#202d25;border-radius:7px}
+.btn{background:#c8ef78;color:#172016;border-radius:6px}
+.section{animation:fade .16s ease}
+@media(max-width:850px){.layout{display:block;padding:0}.nav{position:relative;height:auto;max-height:180px;border:0;border-bottom:1px solid #34453a;display:flex;flex-wrap:wrap}.main{padding:18px 13px}.head{top:0}.nav button{width:auto}.who{display:none}}
 </style></head><body><div id="login" class="card login" hidden><h2>H1 RADAR · Модерация</h2><p class="muted">Войдите через Telegram. Доступ есть только у владельца и назначенной команды.</p><button class="btn" id="loginBtn">Войти через Telegram</button><p id="loginState" class="muted"></p></div><div class="layout" id="app" hidden><aside class="nav"><div class="logo">H1 RADAR<small>МОДЕРАЦИЯ</small></div>
 <button class="active" data-page="overview">▦　Обзор</button><button data-page="events">☷　Лента событий</button><button data-page="marks">⌖　Метки людей</button><button data-page="people">♙　Люди</button><button data-page="teams">♧　Все команды</button><button data-page="beta">♧　Заявки в бету</button><button data-page="profiles">▤　Анкеты</button><button data-page="warnings">△　Варны</button><button data-page="outages">⚠　Возможны сбои</button><button data-page="appeals">▤　Обращения</button><button data-page="cityteam">♙　Команда города</button><button data-page="chats">☷　Чаты и города</button><button data-page="announcement">＋　Объявление на карте</button><button data-page="push">◉　Пуш по городу</button><button data-page="profile">◎　Мой профиль</button><button data-page="rules">▤　Правила амбассадора</button><button data-page="how">ⓘ　Как работать</button><button data-page="wallet">◇　Кошелёк</button><button data-page="shop">▣　Магазин</button><button data-page="journal">☰　Журнал</button><button data-page="awards">✧　Награды</button><button data-page="staff">♙　Штаб кадров</button><button data-page="activity">◷　Активность</button><div class="spacer"></div><div class="who" id="who">Команда H1 RADAR</div></aside><main class="main"><header class="head"><div><h1 id="title">Обзор</h1><span class="muted" id="subtitle">Что происходит и что ждёт решения</span></div><span class="pill">● обновлено сейчас</span></header>
 <section class="section active" id="overview"><div class="hero"><h2>H1 RADAR <span class="badge">Руководство</span></h2><span class="muted">Состояние платформы и сообщества</span><div class="stats"><div class="stat"><b id="users">—</b><small>Люди</small></div><div class="stat"><b id="online">—</b><small>Онлайн · 15 мин</small></div><div class="stat"><b id="today">—</b><small>Новых людей за сутки</small></div><div class="stat"><b id="pending">—</b><small>Заявки / сообщения ждут</small></div></div></div><div class="card"><h3>Привет, <span id="hello">модератор</span>!</h3><p class="muted">Доступные разделы панели. Действия фиксируются в журнале.</p><div class="quick"><button data-go="events">Лента событий</button><button data-go="marks">Метки людей</button><button data-go="people">Люди</button><button data-go="chats">Чаты и города</button><button data-go="appeals">Обращения</button><button data-go="activity">Статистика</button></div></div><div class="grid"><div class="card"><b>На проверке</b><p class="muted" id="pendingText">Загружаем…</p><button class="action" data-go="events">Открыть очередь →</button></div><div class="card"><b>Города</b><p class="muted">Выбери город, чтобы открыть его чат и ленту.</p><button class="action" data-go="chats">Открыть города →</button></div></div><div class="card"><h3>Города сейчас</h3><div class="citygrid" id="cities"></div></div></section>
