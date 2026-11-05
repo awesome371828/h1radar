@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio, hashlib, hmac, json, logging, os, re, secrets, string, time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
 import asyncpg
 from aiogram import Bot, Dispatcher, F
@@ -528,7 +528,7 @@ async def mod_users(authorization:str|None=Header(default=None),q:str=""):
  if q:
   rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at,last_seen_at FROM users WHERE public_code ILIKE $1 OR username ILIKE $1 OR display_name ILIKE $1 OR telegram_id::text ILIKE $1 ORDER BY created_at DESC LIMIT 500","%"+q+"%")
  else: rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at,last_seen_at FROM users ORDER BY created_at DESC LIMIT 500")
- return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat(),"last_seen_at":r["last_seen_at"].isoformat(),"online":r["last_seen_at"]>datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=15)} for r in rows]}
+ return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat(),"last_seen_at":r["last_seen_at"].isoformat(),"online":r["last_seen_at"]>datetime.now(timezone.utc)-timedelta(minutes=15)} for r in rows]}
 
 @app.post("/api/moderation/users/{telegram_id}/role/{role}")
 async def set_role(telegram_id:int,role:str,authorization:str|None=Header(default=None)):
