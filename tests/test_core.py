@@ -43,7 +43,7 @@ class TelegramInitDataTests(unittest.TestCase):
         self.assertEqual(result["id"], 12345)
 
     def test_rejects_tampered_data(self):
-        raw = signed_init_data().replace("Test", "Evil")
+        raw = signed_init_data().replace("hash=", "hash=f")
         with self.assertRaises(ValueError):
             h1.verify_init_data(raw)
 
