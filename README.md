@@ -1,6 +1,6 @@
 # H1 RADAR
 
-Telegram bot + Telegram Mini App for a civic information map and moderated community reports.
+Telegram bot + browser-based civic map and moderated community reports. The map is a regular website, not a Telegram Mini App.
 
 ## Runtime
 - Python 3.12, aiogram 3, FastAPI, asyncpg, PostgreSQL.
@@ -22,7 +22,7 @@ uvicorn h1:app --host 0.0.0.0 --port 8000
 or build the included Dockerfile.
 
 ## Bot flow
-`/start` requests the user's own Telegram contact. Only Russian +7 numbers are accepted. A random RU-XXXX code is assigned. The Mini App is opened using a Telegram Web App inline button. The backend verifies Telegram initData HMAC and age on every authenticated request.
+`/start` creates the user's account and assigns a random RU-XXXX code. The bot sends an ordinary HTTPS URL button below its message; it does not use a reply keyboard, Web App button, or Telegram Mini App. Browser login uses a short-lived one-time deep-link challenge and a server-side session token.
 
 ## Commands
 - `/start` registration / open app
