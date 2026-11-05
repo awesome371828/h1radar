@@ -31,7 +31,7 @@ let loginTimer=null,historyMode=false,mapStarted=false;
 function setGateState(message){const a=$("gateState"),b=$("loginState");if(a)a.textContent=message;if(b)b.textContent=message}
 function lockMap(message="Войди через Telegram, чтобы открыть карту."){if(loginTimer){clearTimeout(loginTimer);loginTimer=null;}loginInProgress=false;const gateButton=$("gateLogin");if(gateButton)gateButton.disabled=false;localStorage.removeItem("h1_session");auth="";me=null;mapStarted=false;document.body.classList.add("auth-locked");$("authGate").hidden=false;setGateState(message);}
 function hasPermission(key){if(!me)return false;if(me.role==="owner")return true;return Array.isArray(me.permissions)&&me.permissions.some(x=>typeof x==="object"&&x.permission===key);}
-async function startMapApp(){if(mapStarted)return;mapStarted=true;document.body.classList.remove("auth-locked");$("authGate").hidden=true;$("profileCode").textContent=me.code||me.username||"Профиль";$("modTab").hidden=!(me.role==="owner"||me.role==="moderator"&&Array.isArray(me.permissions)&&me.permissions.length>0);initMap();try{await loadCities();await loadFeed();if(!$("modTab").hidden)await loadModeration();}catch(e){toast(e.message)}}
+async function startMapApp(){if(mapStarted)return;mapStarted=true;document.body.classList.remove("auth-locked");$("authGate").hidden=true;$("profileCode").textContent=me.code||me.username||"Профиль";$("modTab").hidden=!(me.role==="owner"||hasPermission("statistics")||hasPermission("events")||hasPermission("people"));initMap();try{await loadCities();await loadFeed();if(!$("modTab").hidden)await loadModeration();}catch(e){toast(e.message)}}
 let loginInProgress=false;
 async function loginFromMap(){
  if(loginInProgress)return;
