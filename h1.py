@@ -426,7 +426,7 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
   async with c.transaction():
    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",city,body.category)
    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1))",str(u["telegram_id"]))
-   last_mark=await c.fetchval("SELECT created_at FROM reports WHERE author_id=$1 AND created_at>now()-interval '3 minutes' ORDER BY created_at DESC LIMIT 1",u["telegram_id"])
+   last_mark=await c.fetchval("""SELECT max(mark_time) FROM (SELECT created_at AS mark_time FROM reports WHERE author_id=$1 UNION ALL SELECT created_at AS mark_time FROM report_confirmations WHERE telegram_id=$1) recent_marks WHERE mark_time>now()-interval '3 minutes'""",u["telegram_id"])
    if last_mark:
     raise HTTPException(429,"Одну отметку можно отправлять раз в 3 минуты. Попробуй немного позже.")
    nearby=None
