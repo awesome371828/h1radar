@@ -506,8 +506,8 @@ async def mod_events(authorization:str|None=Header(default=None),q:str="",hours:
 @app.get("/api/moderation/marks")
 async def mod_marks(authorization:str|None=Header(default=None),city:str|None=None):
  await moderator(authorization)
- rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,status,created_at FROM reports WHERE status='published' AND ($1::text IS NULL OR city=$1) ORDER BY created_at DESC LIMIT 500",city)
- return {"items":[{**feed_json(r),"status":r["status"]} for r in rows]}
+ rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.latitude,r.longitude,r.confirmations,r.status,r.created_at,u.public_code,u.username,u.telegram_id FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='published' AND ($1::text IS NULL OR r.city=$1) ORDER BY r.created_at DESC LIMIT 500",city)
+ return {"items":[{**feed_json(r),"status":r["status"],"author_code":r["public_code"],"username":r["username"],"telegram_id":r["telegram_id"]} for r in rows]}
 
 @app.post("/api/moderation/reports/{report_id}/{decision}")
 async def review(report_id:int,decision:str,authorization:str|None=Header(default=None)):
@@ -526,9 +526,9 @@ async def mod_users(authorization:str|None=Header(default=None),q:str=""):
  await moderator(authorization)
  q=q.strip()
  if q:
-  rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at FROM users WHERE public_code ILIKE $1 OR username ILIKE $1 OR display_name ILIKE $1 ORDER BY created_at DESC LIMIT 50","%"+q+"%")
- else: rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at FROM users ORDER BY created_at DESC LIMIT 50")
- return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat()} for r in rows]}
+  rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at,last_seen_at FROM users WHERE public_code ILIKE $1 OR username ILIKE $1 OR display_name ILIKE $1 OR telegram_id::text ILIKE $1 ORDER BY created_at DESC LIMIT 500","%"+q+"%")
+ else: rows=await pool.fetch("SELECT telegram_id,username,display_name,public_code,role,created_at,last_seen_at FROM users ORDER BY created_at DESC LIMIT 500")
+ return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat(),"last_seen_at":r["last_seen_at"].isoformat(),"online":r["last_seen_at"]>datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=15)} for r in rows]}
 
 @app.post("/api/moderation/users/{telegram_id}/role/{role}")
 async def set_role(telegram_id:int,role:str,authorization:str|None=Header(default=None)):
