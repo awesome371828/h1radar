@@ -6,8 +6,8 @@ from urllib.parse import parse_qsl
 import asyncpg
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import (Message, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove,
-    InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo)
+from aiogram.types import (Message, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, BotCommand,
+    InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, MenuButtonWebApp)
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -136,13 +136,23 @@ def feed_json(r):
  "description":r["description"],"created_at":r["created_at"].isoformat()}
 
 def app_kb():
- return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Открыть H1 RADAR",web_app=WebAppInfo(url=WEBAPP_URL))]])
+ return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛰 Открыть H1 RADAR",web_app=WebAppInfo(url=WEBAPP_URL))]])
+
+def app_reply_kb():
+ return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🛰 Открыть H1 RADAR",web_app=WebAppInfo(url=WEBAPP_URL))]],resize_keyboard=True,is_persistent=True,input_field_placeholder="Открыть H1 RADAR")
+
+async def configure_bot_profile(b:Bot):
+ await b.set_my_name("H1 RADAR")
+ await b.set_my_description("H1 RADAR — гражданская карта России. Просматривайте проверенные сообщения сообщества, выбирайте город и отправляйте информацию на модерацию. Не является официальным источником экстренных оповещений.")
+ await b.set_my_short_description("Гражданская карта России и лента проверенных сообщений.")
+ await b.set_my_commands([BotCommand(command="start",description="Запустить бота и открыть H1 RADAR"),BotCommand(command="radar",description="Открыть карту в Telegram"),BotCommand(command="moderation",description="Панель модерации"),BotCommand(command="help",description="Помощь")])
+ await b.set_chat_menu_button(menu_button=MenuButtonWebApp(text="H1 RADAR",web_app=WebAppInfo(url=WEBAPP_URL)))
 
 @dp.message(CommandStart())
 async def start(m:Message):
  row=await pool.fetchrow("SELECT * FROM users WHERE telegram_id=$1",m.from_user.id)
  if row:
-  await m.answer(f"С возвращением! Ваш код H1: <b>{row['public_code']}</b>",reply_markup=app_kb(),parse_mode="HTML"); return
+  await m.answer(f"С возвращением! Ваш код H1: <b>{row['public_code']}</b>\\n\\nНажмите кнопку «Открыть H1 RADAR» внизу чата.",reply_markup=app_reply_kb(),parse_mode="HTML"); await m.answer("Открыть приложение:",reply_markup=app_kb()); return
  kb=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Подтвердить номер телефона",request_contact=True)]],
   resize_keyboard=True,one_time_keyboard=True)
  await m.answer(f"Добро пожаловать в <b>H1 RADAR</b>.\n\nПодтвердите собственный российский номер кнопкой ниже. Принимаются только номера +7. Контакт используется для защиты от автоматических регистраций.\n<a href=\"{WEBAPP_URL}/privacy\">Политика конфиденциальности</a>.",reply_markup=kb,parse_mode="HTML")
@@ -170,8 +180,8 @@ async def contact(m:Message):
     code=candidate; break
    except asyncpg.UniqueViolationError: continue
   if not code: raise RuntimeError("code allocation failed")
- await m.answer(f"Номер подтверждён. Ваш код: <b>{code}</b>",reply_markup=ReplyKeyboardRemove(),parse_mode="HTML")
- await m.answer("H1 RADAR готов к работе.",reply_markup=app_kb())
+ await m.answer(f"Номер подтверждён. Ваш код: <b>{code}</b>\\n\\nКнопка запуска H1 RADAR закреплена внизу чата.",reply_markup=app_reply_kb(),parse_mode="HTML")
+ await m.answer("🛰 Откройте карту прямо здесь, в Telegram:",reply_markup=app_kb())
  if role=="owner": await m.answer("Вам доступна панель владельца.")
 
 @dp.message(Command("radar"))
@@ -195,6 +205,11 @@ async def lifespan(app:FastAPI):
  pool=await asyncpg.create_pool(DATABASE_URL,min_size=1,max_size=int(os.getenv("DB_POOL_SIZE","10")),command_timeout=8,ssl=False,statement_cache_size=0)
  async with pool.acquire() as c: await c.execute(SCHEMA)
  bot=Bot(BOT_TOKEN)
+ try:
+  await configure_bot_profile(bot)
+  log.info("Telegram bot profile, commands and Mini App menu configured")
+ except Exception:
+  log.exception("Could not configure Telegram bot profile/menu; polling will continue")
  polling_task=asyncio.create_task(dp.start_polling(bot,handle_signals=False))
  yield
  if polling_task: polling_task.cancel()
