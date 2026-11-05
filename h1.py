@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio, hashlib, hmac, json, logging, os, re, secrets, string, time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 import asyncpg
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
@@ -19,16 +19,29 @@ log=logging.getLogger("h1")
 BOT_TOKEN=os.environ["BOT_TOKEN"]
 BOT_OWNER=int(os.environ["BOT_OWNER"])
 def normalize_webapp_url(value: str | None) -> str:
- raw=(value or "https://h1radar.relaxdev.ru").strip().rstrip("/")
- if raw.startswith("//"): raw="https:"+raw
- elif raw.startswith("http://"): raw="https://"+raw[7:]
- elif not raw.lower().startswith("https://"): raw="https://"+raw
- host=raw[8:].split("/",1)[0] if raw.startswith("https://") else ""
- if not host or any(ch.isspace() for ch in raw):
-  raise ValueError("WEBAPP_URL must be a valid public HTTPS URL")
- return raw
+ raw=(value or "https://h1radar.relaxdev.ru").strip()
+ if not raw:
+  raw="https://h1radar.relaxdev.ru"
+ if raw.startswith("//"):
+  raw="https:"+raw
+ elif "://" not in raw:
+  raw="https://"+raw
+ try:
+  parts=urlsplit(raw)
+  if parts.scheme.lower()=="http":
+   parts=parts._replace(scheme="https")
+  if parts.scheme.lower()!="https" or not parts.hostname:
+   raise ValueError
+  if parts.username or parts.password or any(ch.isspace() for ch in raw):
+   raise ValueError
+  # Проверяем порт заранее: urlsplit может выбросить ValueError при некорректном значении.
+  _=parts.port
+ except ValueError as exc:
+  raise ValueError("WEBAPP_URL must be a valid public HTTPS URL, e.g. https://h1radar.relaxdev.ru") from exc
+ return urlunsplit(("https",parts.netloc,parts.path.rstrip("/"),parts.query,parts.fragment))
 
 WEBAPP_URL=normalize_webapp_url(os.getenv("WEBAPP_URL"))
+log.info("Telegram Mini App public URL: %s", WEBAPP_URL)
 DATABASE_URL=os.environ["DATABASE_URL"]
 BOT_USERNAME=os.getenv("BOT_USERNAME","").lstrip("@")
 INITDATA_MAX_AGE=int(os.getenv("TG_INITDATA_MAX_AGE","86400"))
