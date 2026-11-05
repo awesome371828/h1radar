@@ -287,12 +287,42 @@ async def ensure_user(u):
  raise RuntimeError("Не удалось выделить уникальный код пользователя")
 
 async def configure_bot_profile(b:Bot):
- await b.set_my_name("H1 RADAR")
- await b.set_my_description("H1 RADAR — гражданская карта, сообщения и городские сообщества. Вход через Telegram.")
- await b.set_my_short_description("Гражданская карта и городские сообщества.")
- await b.set_my_commands([BotCommand(command="start",description="Открыть H1 RADAR"),BotCommand(command="help",description="Помощь")])
- # Показываем постоянную кнопку открытия карты в меню Telegram.
- await b.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть H1 RADAR",web_app=WebAppInfo(url=MAP_URL)))
+ # Профиль и меню настраиваются независимо: сбой одной операции не ломает остальные.
+ operations=[
+  ("name",lambda:b.set_my_name("H1 RADAR")),
+  ("description",lambda:b.set_my_description("H1 RADAR — гражданская карта, городские сообщения и сообщества. Вход и регистрация через Telegram.")),
+  ("short_description",lambda:b.set_my_short_description("Гражданская карта и городские сообщества.")),
+  ("commands",lambda:b.set_my_commands([BotCommand(command="start",description="Открыть H1 RADAR"),BotCommand(command="help",description="Помощь")])),
+  ("menu_button",lambda:b.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть H1 RADAR",web_app=WebAppInfo(url=MAP_URL)))),
+ ]
+ for label,operation in operations:
+  try:
+   await asyncio.wait_for(operation(),timeout=10)
+   log.info("Telegram bot profile setting applied: %s",label)
+  except asyncio.CancelledError:
+   raise
+  except Exception:
+   log.exception("Telegram bot profile setting failed: %s",label)
+ # Устанавливаем фирменный аватар из SVG-исходника проекта. Конвертация в JPG нужна по требованиям Bot API.
+ try:
+  import cairosvg
+  from PIL import Image
+  from io import BytesIO
+  from aiogram.types import BufferedInputFile,InputProfilePhotoStatic
+  avatar_svg=Path("static/h1-avatar.svg")
+  if avatar_svg.is_file():
+   png=cairosvg.svg2png(url=str(avatar_svg),output_width=512,output_height=512)
+   jpg=BytesIO()
+   Image.open(BytesIO(png)).convert("RGB").save(jpg,format="JPEG",quality=94,optimize=True)
+   photo=BufferedInputFile(jpg.getvalue(),filename="h1-radar-avatar.jpg")
+   await asyncio.wait_for(b.set_my_profile_photo(photo=InputProfilePhotoStatic(photo=photo)),timeout=15)
+   log.info("Telegram bot profile photo updated from static/h1-avatar.svg")
+  else:
+   log.warning("Bot avatar source static/h1-avatar.svg is missing")
+ except asyncio.CancelledError:
+  raise
+ except Exception:
+  log.exception("Telegram bot avatar update failed; bot polling will continue")
 
 @dp.message(CommandStart())
 async def start(m:Message):
@@ -326,6 +356,19 @@ async def expire_pending_reports():
   await asyncio.sleep(20)
 
 @asynccontextmanager
+async def run_polling_forever():
+ # aiogram retries transient getUpdates errors internally; this supervisor also recovers
+ # from unexpected dispatcher exits instead of leaving the API alive with a dead bot.
+ while True:
+  try:
+   await dp.start_polling(bot,handle_signals=False,polling_timeout=25)
+   log.error("Telegram polling stopped unexpectedly; restarting in 5 seconds")
+  except asyncio.CancelledError:
+   raise
+  except Exception:
+   log.exception("Telegram polling crashed; restarting in 5 seconds")
+  await asyncio.sleep(5)
+
 async def lifespan(app:FastAPI):
  global pool,bot,polling_task,cleanup_task
  pool=await asyncpg.create_pool(DATABASE_URL,min_size=2,max_size=int(os.getenv("DB_POOL_SIZE","12")),command_timeout=15,ssl=False,statement_cache_size=0,max_inactive_connection_lifetime=300)
@@ -334,20 +377,28 @@ async def lifespan(app:FastAPI):
  try:
   global BOT_USERNAME
   if not BOT_USERNAME:
-   me=await bot.get_me(); BOT_USERNAME=me.username or ""
+   me=await asyncio.wait_for(bot.get_me(),timeout=12)
+   BOT_USERNAME=me.username or ""
   await configure_bot_profile(bot)
-  log.info("Telegram bot profile configured; reply keyboards and Mini App menu disabled")
+ except asyncio.CancelledError:
+  raise
  except Exception:
-  log.exception("Could not configure Telegram bot profile/menu; polling will continue")
- polling_task=asyncio.create_task(dp.start_polling(bot,handle_signals=False))
- cleanup_task=asyncio.create_task(expire_pending_reports())
- yield
- if cleanup_task:
-  cleanup_task.cancel()
-  await asyncio.gather(cleanup_task,return_exceptions=True)
- if polling_task: polling_task.cancel()
- if bot: await bot.session.close()
- if pool: await pool.close()
+  log.exception("Could not finish Telegram bot profile setup; polling will continue")
+ polling_task=asyncio.create_task(run_polling_forever(),name="h1-telegram-polling")
+ cleanup_task=asyncio.create_task(expire_pending_reports(),name="h1-cleanup")
+ try:
+  yield
+ finally:
+  if cleanup_task:
+   cleanup_task.cancel()
+   await asyncio.gather(cleanup_task,return_exceptions=True)
+  if polling_task:
+   polling_task.cancel()
+   await asyncio.gather(polling_task,return_exceptions=True)
+  if bot:
+   await bot.session.close()
+  if pool:
+   await pool.close()
 
 app=FastAPI(title="H1 RADAR API",version="1.0.0",lifespan=lifespan)
 app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL,MAP_URL],allow_credentials=False,allow_methods=["GET","POST","PATCH","DELETE"],allow_headers=["Authorization","Content-Type"])
