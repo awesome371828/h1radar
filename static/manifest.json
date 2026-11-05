@@ -1,1 +1,17 @@
-{"name":"H1 RADAR","short_name":"H1 RADAR","start_url":"/","display":"standalone","background_color":"#07111f","theme_color":"#07111f","lang":"ru"}
+{
+  "name": "H1 RADAR",
+  "short_name": "H1 RADAR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/static/h1-avatar.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
