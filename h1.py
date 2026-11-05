@@ -9,6 +9,8 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import (Message, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove,
     InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo)
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -116,7 +118,10 @@ async def contact(m:Message):
  u=m.from_user; name=" ".join(x for x in [u.first_name,u.last_name] if x) or "Пользователь"
  role="owner" if u.id==BOT_OWNER else "user"
  existing=await pool.fetchrow("SELECT public_code FROM users WHERE telegram_id=$1",u.id)
- if existing: code=existing["public_code"]
+ if existing:
+  code=existing["public_code"]
+  if u.id==BOT_OWNER:
+   await pool.execute("UPDATE users SET role='owner',phone=$2,username=$3,display_name=$4 WHERE telegram_id=$1",u.id,phone,u.username,name)
  else:
   code=None
   for _ in range(30):
@@ -159,6 +164,12 @@ async def lifespan(app:FastAPI):
 
 app=FastAPI(title="H1 RADAR API",version="1.0.0",lifespan=lifespan)
 app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL],allow_credentials=False,allow_methods=["GET","POST"],allow_headers=["Authorization","Content-Type"])
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def index():
+    return FileResponse("static/index.html")
+
 
 class ReportIn(BaseModel):
  city:str=Field(min_length=2,max_length=80)
