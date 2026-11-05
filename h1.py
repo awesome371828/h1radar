@@ -408,7 +408,7 @@ async def expire_pending_reports():
  while True:
   try:
    if pool is not None:
-    result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '3 minutes'")
+    result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '5 minutes'")
     if result!="DELETE 0": log.info("Expired unconfirmed marks: %s",result)
     await pool.execute("DELETE FROM login_challenges WHERE expires_at<now() OR consumed_at IS NOT NULL")
     await pool.execute("DELETE FROM web_sessions WHERE expires_at<now()")
