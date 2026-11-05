@@ -55,3 +55,14 @@ This initial implementation is a civic reporting platform, not an authoritative 
 Ограничения аккаунта проверяются централизованно в `current_user`, поэтому распространяются на все защищённые API, а не только на один экран. Новые таблицы создаются при запуске через `SCHEMA`; отдельная повторно применимая миграция находится в `migrations/002_moderation_expansion.sql`.
 
 Городские координаты валидируются по геометрии России. Заявки и изменения каталога записываются в журнал модерации. Публичная статистика агрегирована и не раскрывает персональные данные.
+
+
+## Current interface capabilities
+- The main landing page is an original H1 visual system with live public aggregate counters, searchable/collapsible city directory, Moscow-time clock, FAQ and publication workflow.
+- The map updates the public feed every 15 seconds while visible, displays timestamps in Europe/Moscow, supports live/history modes, city filtering, city chat, collapsible side panel and browser notifications for new published reports while the page is open.
+- A report is submitted immediately after the user selects a category and taps a point inside Russia; there is no second manual submit button. Geolocation selection also submits directly.
+- User profiles show a public code, role, join date and personal activity totals. City suggestions are submitted for owner review.
+- Moderation includes city catalog editing, city-request review, account restrictions and city-chat message search/deletion.
+- Browser notifications are page-session notifications, not server push; they work while the map tab is open and permission is granted.
+
+The interface is a feature-level H1 implementation, not a literal copy of GDE.WTF. Military tracking, live operational positions, weapon/PVO targeting data and other sensitive operational features are intentionally not implemented. H1 is a civil community-reporting service and is not an official emergency alert source.
