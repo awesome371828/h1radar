@@ -9,7 +9,7 @@ Telegram bot + browser-based civic map and moderated community reports. The map 
 - No GitHub Actions are required.
 
 ## Environment
-Required: `BOT_TOKEN`, `BOT_OWNER` (numeric Telegram ID), `DATABASE_URL`. Optional: `MAP_URL` (defaults to `https://h1radar.relaxdev.ru`) and `BOT_USERNAME` (otherwise read from Telegram on startup).
+Required: `BOT_TOKEN`, `BOT_OWNER` (numeric Telegram ID), `DATABASE_URL`. Optional: `MAP_URL` (defaults to `https://map.h1radar.relaxdev.ru`) and `BOT_USERNAME` (otherwise read from Telegram on startup).
 Optional: `PORT`, `DB_POOL_SIZE`, `LOG_LEVEL`.
 
 Point `h1radar.relaxdev.ru` and `moder.h1radar.relaxdev.ru` to this same RelaxDev service and enable HTTPS for both. The main host serves the live map; `moder.` serves the dedicated moderation dashboard. The optional `map.` hostname also serves the map. Set RelaxDev health check to `/api/health`.
@@ -37,4 +37,4 @@ or build the included Dockerfile.
 - Owner only: `POST /api/moderation/users/{telegram_id}/role/{user|moderator}`
 
 ## Important operational notes
-This initial implementation is a civic reporting platform, not an authoritative emergency-alert feed. Do not submit tactical, military, or sensitive location details. The starter city directory includes 40 major Russian cities; expand the cities table with verified coordinates for additional settlements and regions. OSM tile usage is subject to its public tile policy; for production nationwide traffic, configure a compliant tile provider/style and attribution. Push delivery is not configured. Sign-in confirms control of the Telegram account; the current browser-login flow does not request or store a phone number.
+This initial implementation is a civic reporting platform, not an authoritative emergency-alert feed. Do not submit tactical, military, or sensitive location details. The startup schema seeds more than 100 Russian cities and settlements. The base map covers the full Russian territory; the city directory can be extended with additional verified coordinates as needed. OSM tile usage is subject to its public tile policy; for production nationwide traffic, configure a compliant tile provider/style and attribution. Nearby marks store rounded coordinates (two decimal places); the author counts as the first confirmation. Two additional distinct users are required for automatic publication. Moderators can also publish or reject a mark. Push delivery is not configured. Sign-in confirms control of the Telegram account; the current browser-login flow does not request or store a phone number.
