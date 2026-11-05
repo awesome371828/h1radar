@@ -62,3 +62,42 @@ INSERT INTO cities(name,region,latitude,longitude) VALUES
 ('Ижевск','Удмуртская Республика',56.8527,53.2115),
 ('Оренбург','Оренбургская область',51.7682,55.0969)
 ON CONFLICT(name) DO UPDATE SET region=EXCLUDED.region,latitude=EXCLUDED.latitude,longitude=EXCLUDED.longitude;
+
+
+-- H1 RADAR nearby marks: coarse coordinates and independent confirmations.
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS confirmations INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_category_check;
+ALTER TABLE reports ADD CONSTRAINT reports_category_check
+ CHECK(category IN ('alert','all_clear','shelter','info','drone','explosion','siren','rocket'));
+CREATE TABLE IF NOT EXISTS report_confirmations (
+ report_id BIGINT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+ telegram_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ PRIMARY KEY(report_id,telegram_id)
+);
+CREATE TABLE IF NOT EXISTS login_challenges (
+ nonce TEXT PRIMARY KEY,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ expires_at TIMESTAMPTZ NOT NULL,
+ telegram_id BIGINT,
+ consumed_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS web_sessions (
+ token_hash TEXT PRIMARY KEY,
+ telegram_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS web_sessions_expiry_idx ON web_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS city_chat_messages (
+ id BIGSERIAL PRIMARY KEY,
+ city TEXT NOT NULL,
+ telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,
+ username TEXT,
+ display_name TEXT NOT NULL,
+ message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 1000),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS city_chat_city_time_idx ON city_chat_messages(city,created_at DESC);
