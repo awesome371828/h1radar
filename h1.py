@@ -748,19 +748,24 @@ async def review(report_id:int,decision:str,authorization:str|None=Header(defaul
  return {"ok":True,"status":status}
 
 @app.get("/api/moderation/users")
-async def mod_users(authorization:str|None=Header(default=None),q:str=""):
- await moderator(authorization,"people")
+async def mod_users(authorization:str|None=Header(default=None),q:str="",city:str|None=None):
+ actor=await moderator(authorization,"people",city)
+ if actor["role"]!="owner" and not city: raise HTTPException(400,"Выбери город, к которому выданы права.")
  q=q.strip()
  if q:
   rows=await pool.fetch("""SELECT u.telegram_id,u.username,u.display_name,u.public_code,u.role,u.created_at,u.last_seen_at,
    (ur.telegram_id IS NOT NULL AND (ur.expires_at IS NULL OR ur.expires_at>now())) AS restricted,
    ur.reason AS restriction_reason,ur.expires_at AS restriction_expires_at
    FROM users u LEFT JOIN user_restrictions ur ON ur.telegram_id=u.telegram_id
-   WHERE u.public_code ILIKE $1 OR u.username ILIKE $1 OR u.display_name ILIKE $1 OR u.telegram_id::text ILIKE $1 ORDER BY u.created_at DESC LIMIT 500""","%"+q+"%")
+   WHERE (u.public_code ILIKE $1 OR u.username ILIKE $1 OR u.display_name ILIKE $1 OR u.telegram_id::text ILIKE $1)
+   AND ($2 OR EXISTS(SELECT 1 FROM reports r WHERE r.author_id=u.telegram_id AND r.city=$3) OR EXISTS(SELECT 1 FROM city_chat_messages m WHERE m.telegram_id=u.telegram_id AND m.city=$3))
+   ORDER BY u.created_at DESC LIMIT 500""","%"+q+"%",actor["role"]=="owner",city)
  else: rows=await pool.fetch("""SELECT u.telegram_id,u.username,u.display_name,u.public_code,u.role,u.created_at,u.last_seen_at,
-  (ur.telegram_id IS NOT NULL AND (ur.expires_at IS NULL OR ur.expires_at>now())) AS restricted,
-  ur.reason AS restriction_reason,ur.expires_at AS restriction_expires_at
-  FROM users u LEFT JOIN user_restrictions ur ON ur.telegram_id=u.telegram_id ORDER BY u.created_at DESC LIMIT 500""")
+   (ur.telegram_id IS NOT NULL AND (ur.expires_at IS NULL OR ur.expires_at>now())) AS restricted,
+   ur.reason AS restriction_reason,ur.expires_at AS restriction_expires_at
+   FROM users u LEFT JOIN user_restrictions ur ON ur.telegram_id=u.telegram_id
+   WHERE ($1 OR EXISTS(SELECT 1 FROM reports r WHERE r.author_id=u.telegram_id AND r.city=$2) OR EXISTS(SELECT 1 FROM city_chat_messages m WHERE m.telegram_id=u.telegram_id AND m.city=$2))
+   ORDER BY u.created_at DESC LIMIT 500""",actor["role"]=="owner",city)
  return {"items":[{"id":r["telegram_id"],"telegram_id":r["telegram_id"],"username":r["username"],"telegram_url":("https://t.me/"+r["username"]) if r["username"] else ("tg://user?id="+str(r["telegram_id"])),"name":r["display_name"],"code":r["public_code"],"role":r["role"],"created_at":r["created_at"].isoformat(),"last_seen_at":r["last_seen_at"].isoformat(),"online":r["last_seen_at"]>datetime.now(timezone.utc)-timedelta(minutes=15),"restricted":r["restricted"],"restriction_reason":r["restriction_reason"],"restriction_expires_at":r["restriction_expires_at"].isoformat() if r["restriction_expires_at"] else None} for r in rows]}
 
 @app.post("/api/moderation/users/{telegram_id}/role/{role}")
