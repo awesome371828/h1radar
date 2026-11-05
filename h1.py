@@ -332,7 +332,7 @@ async def mod_summary(authorization:str|None=Header(default=None)):
  await moderator(authorization)
  return {"pending":await pool.fetchval("SELECT count(*) FROM reports WHERE status='pending'"),
  "users":await pool.fetchval("SELECT count(*) FROM users"),
- "published":await pool.fetchval("SELECT count(*) FROM reports WHERE status='published'" )}
+ "published":await pool.fetchval("SELECT count(*) FROM reports WHERE status='published'" ),"today_users":await pool.fetchval("SELECT count(*) FROM users WHERE created_at>=date_trunc('day',now())"),"today_events":await pool.fetchval("SELECT count(*) FROM reports WHERE created_at>=date_trunc('day',now())"),"online":await pool.fetchval("SELECT count(*) FROM users WHERE last_seen_at>now()-interval '15 minutes'")}
 
 @app.get("/api/moderation/reports")
 async def mod_reports(authorization:str|None=Header(default=None)):
