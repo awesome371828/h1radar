@@ -156,3 +156,6 @@ main{height:100dvh;min-height:0;display:block;padding:0}
  .side{width:45vw}.map-report{right:calc(45vw + 14px);padding:11px 13px}.map-actions{right:calc(45vw + 14px)}
  .brand small{display:none}.topcenter{left:44%}
 }
+
+.popup-confirm{display:block;margin-top:9px;padding:8px 12px;border:1px solid #8abbe655;border-radius:10px;background:#183d60;color:#e9f5ff;font:600 11px Inter;cursor:pointer}
+.popup-confirm:disabled{opacity:.5;cursor:wait}
