@@ -34,3 +34,31 @@ body{background:radial-gradient(55% 40% at 20% 0%,rgba(26,95,208,.22),transparen
  main{height:calc(100dvh - 120px - var(--tg-content-safe-area-inset-top,0px));}
  .side{background:linear-gradient(160deg,rgba(12,34,63,.94),rgba(4,15,31,.96));backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
 }
+
+
+/* H1 RADAR — midnight glass visual pass */
+:root{--bg:#050b14;--panel:rgba(10,25,43,.82);--panel2:rgba(15,37,61,.9);--line:rgba(166,205,239,.17);--text:#edf6ff;--muted:#91a8c1;--blue:#a7d4ff;--cyan:#68ded6;--red:#ff7789}
+body{background:#050b14;color:var(--text);letter-spacing:-.012em}
+.app{background:radial-gradient(ellipse at 48% -35%,#21466b55 0,transparent 54%),#050b14}
+.top{position:absolute;top:14px;left:16px;right:16px;height:58px;padding:0 17px;border:1px solid #9bc8ed35;border-radius:19px;background:linear-gradient(120deg,#193a5dcc,#0b1c30df 55%,#193755c9);backdrop-filter:blur(24px) saturate(160%);box-shadow:0 18px 48px #0008,inset 0 1px #ffffff25;z-index:20}
+.brandmark{border-radius:11px;background:linear-gradient(145deg,#295477,#10243a);border-color:#91c5ed70;box-shadow:0 0 24px #67c9e51c}
+.topright{gap:9px}.live{padding:8px 12px;border:1px solid #83d9cb2b;border-radius:30px;background:#4bcbb110}
+.iconbtn{border-radius:50%;background:#ffffff0d;border-color:#ffffff25;backdrop-filter:blur(12px);transition:transform .2s,background .2s,box-shadow .2s}
+.iconbtn:hover{transform:translateY(-1px);background:#ffffff1c;box-shadow:0 5px 20px #6cbfff20}
+main{height:100dvh;min-height:600px;padding-top:0;grid-template-columns:minmax(0,1fr) 350px;gap:0}
+.mapwrap{background:#06101c}
+#map{filter:saturate(.82) contrast(1.06)}
+.side{align-self:stretch;margin:86px 16px 16px 0;padding:20px 18px;border:1px solid #9bc8ed35;border-radius:25px;background:linear-gradient(155deg,#17385bcf,#0a1b30ed 58%,#0a1728ed);backdrop-filter:blur(26px) saturate(155%);box-shadow:0 24px 65px #0008,inset 0 1px #ffffff20}
+.sidehead h1{font-size:22px;letter-spacing:-.8px}.sidehead small,.metrics small{letter-spacing:1.5px;color:#8ea9c6}
+.tag{border-color:#4faaa078;background:#45cdb014;color:#83e4d4}
+.search,.field,select{border-radius:12px!important;background:#061426c9!important;border-color:#8eb8dc35!important;color:#e8f4ff!important;outline:none;transition:border-color .2s,box-shadow .2s}
+.search:focus-within,.field:focus,select:focus{border-color:#79bdf2a8!important;box-shadow:0 0 0 3px #68b9ef16}
+.metrics>div,.item,.modrow,.about{border:1px solid #a4c8e51c;border-radius:15px;background:linear-gradient(145deg,#ffffff0b,#ffffff04);box-shadow:inset 0 1px #ffffff09}
+.tabs{border-bottom-color:#a4c8e51d}.tabs button{color:#8fa8c1}.tabs button.active{color:#e8f5ff;border-bottom-color:#7fc6ff}
+.primary{border:1px solid #d6edff;background:linear-gradient(135deg,#c6e5ff,#82bdf2);color:#071a2b;border-radius:13px;box-shadow:0 9px 26px #73b9f22c}
+.primary:hover{box-shadow:0 13px 32px #73b9f244;transform:translateY(-1px)}
+.maptools button,.mapbadge{border-radius:12px;border:1px solid #9ac5e53d;background:#0a1c30d9;color:#d8ebfc;backdrop-filter:blur(18px);box-shadow:0 8px 26px #0006}
+.mapbadge{letter-spacing:1.2px}
+.modal .dialog{border:1px solid #9ac5e544!important;border-radius:22px!important;background:linear-gradient(150deg,#173653f2,#081729f5)!important;box-shadow:0 35px 90px #000b,inset 0 1px #ffffff20!important;backdrop-filter:blur(28px)}
+.toast{border:1px solid #9ac5e544;background:#102943ed;backdrop-filter:blur(20px);border-radius:12px;box-shadow:0 12px 40px #0008}
+@media(max-width:850px){.top{top:8px;left:8px;right:8px;height:54px;border-radius:16px;padding:0 11px}.side{margin:0;border-radius:22px 22px 0 0;border-left:1px solid #9bc8ed35;border-bottom:0}.live{font-size:8px;padding:6px 8px}main{height:100dvh;min-height:0;grid-template-columns:1fr}.mapwrap{min-height:50dvh}.side{margin:0 8px 8px;max-height:46dvh}}
