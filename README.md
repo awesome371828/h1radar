@@ -36,3 +36,22 @@ or build the included Dockerfile.
 
 ## Important operational notes
 This initial implementation is a civic reporting platform, not an authoritative emergency-alert feed. Do not submit tactical, military, or sensitive location details. The startup schema seeds more than 100 Russian cities and settlements. The base map covers the full Russian territory; the city directory can be extended with additional verified coordinates as needed. OSM tile usage is subject to its public tile policy; for production nationwide traffic, configure a compliant tile provider/style and attribution. Nearby marks store rounded coordinates (two decimal places); the author counts as the first confirmation. Two additional distinct users are required for automatic publication. Moderators can also publish or reject a mark. Push delivery is not configured. Sign-in confirms control of the Telegram account; the current browser-login flow does not request or store a phone number.
+
+
+## Расширенная модерация и каталог городов
+
+В текущем backend доступны следующие административные API (все требуют Bearer-сессию Telegram):
+
+- `GET /api/moderation/cities?q=` — поиск по каталогу городов и регионам.
+- `POST /api/moderation/cities` — добавление города (только владелец). Принимает `name`, `region`, опционально `latitude` и `longitude`.
+- `PATCH /api/moderation/cities/{city_id}` — изменение названия, региона, координат и включённости (только владелец).
+- `POST /api/city-requests` — заявка пользователя на новый город (до 3 заявок за 24 часа).
+- `GET /api/moderation/city-requests?status=pending|approved|rejected|all` — очередь заявок.
+- `POST /api/moderation/city-requests/{request_id}/approve` или `/reject` — решение владельца.
+- `GET /api/moderation/chat?city=` — поиск сообщений городских чатов для команды.
+- `POST /api/moderation/users/{telegram_id}/restriction` — ограничение аккаунта (только владелец); JSON: `{"reason":"...","hours":24}`. Без `hours` ограничение бессрочное.
+- `DELETE /api/moderation/users/{telegram_id}/restriction` — снятие ограничения.
+
+Ограничения аккаунта проверяются централизованно в `current_user`, поэтому распространяются на все защищённые API, а не только на один экран. Новые таблицы создаются при запуске через `SCHEMA`; отдельная повторно применимая миграция находится в `migrations/002_moderation_expansion.sql`.
+
+Городские координаты валидируются по геометрии России. Заявки и изменения каталога записываются в журнал модерации. Публичная статистика агрегирована и не раскрывает персональные данные.
