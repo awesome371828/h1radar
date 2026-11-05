@@ -557,9 +557,9 @@ async def cities(authorization:str|None=Header(default=None)):
 async def feed(city:str|None=None,limit:int=50,hours:int=24,authorization:str|None=Header(default=None)):
  await current_user(authorization)
  limit=max(1,min(limit,100)); hours=max(1,min(hours,720))
- # Pending marks are visible to everyone for their three-minute confirmation window.
- if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '5 minutes') AND city=$1 AND created_at>=now()-make_interval(hours=>$2) ORDER BY created_at DESC LIMIT $3",city,hours,limit)
- else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND created_at>=now()-make_interval(hours=>$1) ORDER BY created_at DESC LIMIT $2",hours,limit)
+ # Pending marks remain visible for up to five minutes while the community checks them.
+ if city: rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.latitude,r.longitude,r.confirmations,r.created_at,r.status,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status IN ('published','pending') AND (r.status='published' OR r.created_at>=now()-interval '5 minutes') AND r.city=$1 AND r.created_at>=now()-make_interval(hours=>$2) ORDER BY r.created_at DESC LIMIT $3",city,hours,limit)
+ else: rows=await pool.fetch("SELECT r.id,r.city,r.category,r.description,r.latitude,r.longitude,r.confirmations,r.created_at,r.status,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status IN ('published','pending') AND (r.status='published' OR r.created_at>=now()-interval '5 minutes') AND r.created_at>=now()-make_interval(hours=>$1) ORDER BY r.created_at DESC LIMIT $2",hours,limit)
  return {"items":[feed_json(r) for r in rows]}
 
 @app.post("/api/reports")
@@ -612,6 +612,46 @@ async def confirm_report(report_id:int,authorization:str|None=Header(default=Non
    count=await c.fetchval("SELECT count(*) FROM report_confirmations WHERE report_id=$1",report_id)
    await c.execute("UPDATE reports SET confirmations=$2,status=CASE WHEN $2>=3 THEN 'published' ELSE status END,reviewed_at=CASE WHEN $2>=3 THEN now() ELSE reviewed_at END WHERE id=$1",report_id,count)
  return {"ok":True,"confirmations":count,"published":count>=3}
+
+@app.get("/api/moderation/assignments")
+async def moderator_assignments(authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Назначать команду может только владелец.")
+ rows=await pool.fetch("""SELECT p.telegram_id,u.public_code,u.display_name,u.username,c.id AS city_id,c.name AS city,p.permission
+ FROM moderator_city_permissions p JOIN users u ON u.telegram_id=p.telegram_id JOIN cities c ON c.id=p.city_id
+ ORDER BY c.name,u.display_name,p.permission""")
+ return {"items":[dict(r) for r in rows]}
+
+@app.post("/api/moderation/assignments")
+async def assign_city_moderator(body:dict,authorization:str|None=Header(default=None)):
+ actor=await moderator(authorization)
+ if actor["role"]!="owner": raise HTTPException(403,"Назначать модераторов может только владелец.")
+ code=str(body.get("code","")).strip().upper()
+ city=str(body.get("city","")).strip()
+ requested=body.get("permissions")
+ allowed=PERMISSIONS-{"ambassador"}
+ if not code or not city or not isinstance(requested,list) or not requested:
+  raise HTTPException(400,"Укажи код жителя, город и хотя бы одно право.")
+ if any(not isinstance(x,str) or x not in allowed for x in requested):
+  raise HTTPException(400,"В списке есть неизвестное или недоступное право.")
+ target=await pool.fetchrow("SELECT telegram_id,public_code,display_name FROM users WHERE upper(public_code)=$1",code)
+ if not target: raise HTTPException(404,"Житель с таким номером не найден. Сначала найди его в разделе «Люди».")
+ city_row=await pool.fetchrow("SELECT id,name FROM cities WHERE name=$1 AND enabled=true",city)
+ if not city_row: raise HTTPException(404,"Город не найден или отключён.")
+ try:
+  async with pool.acquire() as c:
+   async with c.transaction():
+    await c.execute("UPDATE users SET role='moderator' WHERE telegram_id=$1",target["telegram_id"])
+    for permission in sorted(set(requested)):
+     await c.execute("INSERT INTO moderator_city_permissions(telegram_id,city_id,permission,granted_by) VALUES($1,$2,$3,$4) ON CONFLICT(telegram_id,city_id,permission) DO NOTHING",target["telegram_id"],city_row["id"],permission,actor["telegram_id"])
+    await c.execute("INSERT INTO moderation_log(actor_id,action,target_id,details) VALUES($1,'city_moderator_assigned',$2,$3)",actor["telegram_id"],target["telegram_id"],city_row["name"]+" · "+", ".join(sorted(set(requested))))
+ except asyncpg.UniqueViolationError:
+  raise HTTPException(409,"У этого города уже есть амбассадор. Сначала сними прежнее назначение.")
+ if bot:
+  try:
+   await bot.send_message(target["telegram_id"],"🛰 <b>Тебе выданы права команды H1 RADAR</b>\\nГород: <b>"+city_row["name"]+"</b>\\nПрава: "+", ".join(sorted(set(requested)))+"\\nОткрой панель команды: "+MAP_URL,parse_mode="HTML")
+  except Exception: log.warning("Could not notify newly assigned moderator %s",target["telegram_id"],exc_info=True)
+ return {"ok":True,"telegram_id":target["telegram_id"],"city":city_row["name"],"permissions":sorted(set(requested))}
 
 @app.get("/api/moderation/summary")
 async def mod_summary(authorization:str|None=Header(default=None)):
