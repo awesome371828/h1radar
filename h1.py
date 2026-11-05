@@ -703,10 +703,24 @@ async def revoke_city_permission(telegram_id:int,city_id:int,permission:str,auth
 
 @app.get("/api/moderation/summary")
 async def mod_summary(authorization:str|None=Header(default=None)):
- await moderator(authorization,"statistics")
- return {"pending":await pool.fetchval("SELECT count(*) FROM reports WHERE status='pending'"),
- "users":await pool.fetchval("SELECT count(*) FROM users"),
- "published":await pool.fetchval("SELECT count(*) FROM reports WHERE status='published'" ),"today_users":await pool.fetchval("SELECT count(*) FROM users WHERE created_at>=date_trunc('day',now())"),"today_events":await pool.fetchval("SELECT count(*) FROM reports WHERE created_at>=date_trunc('day',now())"),"online":await pool.fetchval("SELECT count(*) FROM users WHERE last_seen_at>now()-interval '15 minutes'")}
+ actor=await moderator(authorization,"statistics")
+ if actor["role"]=="owner":
+  row=await pool.fetchrow("""SELECT
+   (SELECT count(*) FROM reports WHERE status='pending') AS pending,
+   (SELECT count(*) FROM users) AS users,
+   (SELECT count(*) FROM reports WHERE status='published') AS published,
+   (SELECT count(*) FROM users WHERE created_at>=date_trunc('day',now())) AS today_users,
+   (SELECT count(*) FROM reports WHERE created_at>=date_trunc('day',now())) AS today_events,
+   (SELECT count(*) FROM users WHERE last_seen_at>now()-interval '15 minutes') AS online""")
+ else:
+  row=await pool.fetchrow("""SELECT
+   (SELECT count(*) FROM reports r WHERE r.status='pending' AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=r.city)) AS pending,
+   (SELECT count(DISTINCT u.telegram_id) FROM users u WHERE EXISTS(SELECT 1 FROM reports r WHERE r.author_id=u.telegram_id AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=r.city)) OR EXISTS(SELECT 1 FROM city_chat_messages m WHERE m.telegram_id=u.telegram_id AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=m.city))) AS users,
+   (SELECT count(*) FROM reports r WHERE r.status='published' AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=r.city)) AS published,
+   (SELECT count(DISTINCT u.telegram_id) FROM users u WHERE u.created_at>=date_trunc('day',now()) AND (EXISTS(SELECT 1 FROM reports r WHERE r.author_id=u.telegram_id AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=r.city)) OR EXISTS(SELECT 1 FROM city_chat_messages m WHERE m.telegram_id=u.telegram_id AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=m.city)))) AS today_users,
+   (SELECT count(*) FROM reports r WHERE r.created_at>=date_trunc('day',now()) AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=r.city)) AS today_events,
+   (SELECT count(DISTINCT u.telegram_id) FROM users u WHERE u.last_seen_at>now()-interval '15 minutes' AND (EXISTS(SELECT 1 FROM reports r WHERE r.author_id=u.telegram_id AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=r.city)) OR EXISTS(SELECT 1 FROM city_chat_messages m WHERE m.telegram_id=u.telegram_id AND EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$1 AND p.permission='statistics' AND c.name=m.city)))) AS online""",actor["telegram_id"])
+ return {key:int(row[key] or 0) for key in ("pending","users","published","today_users","today_events","online")}
 
 @app.get("/api/moderation/reports")
 async def mod_reports(authorization:str|None=Header(default=None)):
