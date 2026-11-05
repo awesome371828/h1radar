@@ -395,6 +395,7 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
  lon=round(body.longitude,2) if body.longitude is not None else None
  async with pool.acquire() as c:
   async with c.transaction():
+   await c.execute("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",city,body.category)
    nearby=None
    if lat is not None and lon is not None:
     nearby=await c.fetchrow("""SELECT id,author_id FROM reports
