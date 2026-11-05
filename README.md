@@ -9,10 +9,10 @@ Telegram bot + browser-based civic map and moderated community reports. The map 
 - No GitHub Actions are required.
 
 ## Environment
-Required: `BOT_TOKEN`, `BOT_OWNER` (numeric Telegram ID), `DATABASE_URL`. Optional: `MAP_URL` (defaults to `https://map.h1radar.relaxdev.ru`) and `BOT_USERNAME` (otherwise read from Telegram on startup).
+Required: `BOT_TOKEN`, `BOT_OWNER` (numeric Telegram ID), `DATABASE_URL`. Optional: `MAP_URL` (defaults to `https://h1radar.relaxdev.ru`) and `BOT_USERNAME` (otherwise read from Telegram on startup).
 Optional: `PORT`, `DB_POOL_SIZE`, `LOG_LEVEL`.
 
-Point both `h1radar.relaxdev.ru` and `map.h1radar.relaxdev.ru` to this RelaxDev service and enable HTTPS for both hostnames. The root host serves the landing page; the `map.` host serves the map. Set RelaxDev health check to `/api/health`.
+Point `h1radar.relaxdev.ru` and `moder.h1radar.relaxdev.ru` to this same RelaxDev service and enable HTTPS for both. The main host serves the live map; `moder.` serves the dedicated moderation dashboard. The optional `map.` hostname also serves the map. Set RelaxDev health check to `/api/health`.
 
 ## Run
 ```bash
@@ -31,7 +31,7 @@ or build the included Dockerfile.
 - `/help`
 
 ## API
-- `GET /api/health`, `GET /api/cities`, `GET /api/feed`
+- `GET /api/health`, `GET /api/cities`, `GET /api/feed`, `GET /api/city-chat`, `POST /api/city-chat`
 - Authenticated: `GET /api/me`, `POST /api/reports`
 - Moderator: `GET /api/moderation/summary`, `GET /api/moderation/reports`, `POST /api/moderation/reports/{id}/{publish|reject}`, `GET /api/moderation/users`, `GET /api/moderation/log`
 - Owner only: `POST /api/moderation/users/{telegram_id}/role/{user|moderator}`
