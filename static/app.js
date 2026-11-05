@@ -1,5 +1,5 @@
-const incomingToken=new URLSearchParams(location.search).get("login_token");
-if(incomingToken){localStorage.setItem("h1_session",incomingToken);const clean=new URL(location.href);clean.searchParams.delete("login_token");history.replaceState(null,"",clean.pathname+clean.search+clean.hash);}
+const incomingToken=new URLSearchParams(location.hash.slice(1)).get("login_token");
+if(incomingToken){localStorage.setItem("h1_session",incomingToken);const clean=new URL(location.href);clean.hash="";history.replaceState(null,"",clean.pathname+clean.search);}
 const API=location.origin+"/api";let auth=localStorage.getItem("h1_session")? "Bearer "+localStorage.getItem("h1_session"):"";let me=null,map=null,cities=[],items=[];
 const $=id=>document.getElementById(id);const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 async function api(path,opts={}){const r=await fetch(API+path,{...opts,headers:{"Content-Type":"application/json","Authorization":auth,...opts.headers}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.detail||"Ошибка запроса");return d}
