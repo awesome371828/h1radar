@@ -26,6 +26,17 @@ def signed_init_data(user_id=12345, auth_date=None):
     return urlencode(values)
 
 
+class WebAppUrlTests(unittest.TestCase):
+    def test_adds_https_to_bare_domain(self):
+        self.assertEqual(h1.normalize_webapp_url("h1radar.relaxdev.ru"), "https://h1radar.relaxdev.ru")
+
+    def test_upgrades_http_to_https(self):
+        self.assertEqual(h1.normalize_webapp_url("http://h1radar.relaxdev.ru"), "https://h1radar.relaxdev.ru")
+
+    def test_keeps_https_url(self):
+        self.assertEqual(h1.normalize_webapp_url("https://h1radar.relaxdev.ru/"), "https://h1radar.relaxdev.ru")
+
+
 class PhoneValidationTests(unittest.TestCase):
     def test_accepts_russian_phone(self):
         self.assertEqual(h1.ru_phone("+7 (999) 123-45-67"), "+79991234567")
