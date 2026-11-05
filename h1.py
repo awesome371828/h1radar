@@ -290,7 +290,6 @@ async def start(m:Message):
 async def help_cmd(m:Message):
  await m.answer("/start — открыть H1 RADAR и войти\n/help — помощь по входу и использованию карты")
 
-@asynccontextmanager
 async def expire_pending_reports():
  while True:
   try:
