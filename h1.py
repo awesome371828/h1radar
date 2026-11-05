@@ -192,7 +192,7 @@ async def help_cmd(m:Message):
 @asynccontextmanager
 async def lifespan(app:FastAPI):
  global pool,bot,polling_task
- pool=await asyncpg.create_pool(DATABASE_URL,min_size=1,max_size=int(os.getenv("DB_POOL_SIZE","10")),command_timeout=8)
+ pool=await asyncpg.create_pool(DATABASE_URL,min_size=1,max_size=int(os.getenv("DB_POOL_SIZE","10")),command_timeout=8,ssl=False,statement_cache_size=0)
  async with pool.acquire() as c: await c.execute(SCHEMA)
  bot=Bot(BOT_TOKEN)
  polling_task=asyncio.create_task(dp.start_polling(bot,handle_signals=False))
