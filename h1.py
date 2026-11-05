@@ -145,7 +145,7 @@ async def start(m:Message):
   await m.answer(f"С возвращением! Ваш код H1: <b>{row['public_code']}</b>",reply_markup=app_kb(),parse_mode="HTML"); return
  kb=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Подтвердить номер телефона",request_contact=True)]],
   resize_keyboard=True,one_time_keyboard=True)
- await m.answer("Добро пожаловать в <b>H1 RADAR</b>.\n\nПодтвердите собственный российский номер кнопкой ниже. Принимаются только номера +7. Контакт используется для защиты от автоматических регистраций.",reply_markup=kb,parse_mode="HTML")
+ await m.answer(f"Добро пожаловать в <b>H1 RADAR</b>.\n\nПодтвердите собственный российский номер кнопкой ниже. Принимаются только номера +7. Контакт используется для защиты от автоматических регистраций.\n<a href=\"{WEBAPP_URL}/privacy\">Политика конфиденциальности</a>.",reply_markup=kb,parse_mode="HTML")
 
 @dp.message(F.contact)
 async def contact(m:Message):
