@@ -379,10 +379,10 @@ async def cities():
  return {"cities":[dict(r) for r in rows]}
 
 @app.get("/api/feed")
-async def feed(city:str|None=None,limit:int=50):
- limit=max(1,min(limit,100))
- if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' AND city=$1 ORDER BY created_at DESC LIMIT $2",city,limit)
- else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' ORDER BY created_at DESC LIMIT $1",limit)
+async def feed(city:str|None=None,limit:int=50,hours:int=24):
+ limit=max(1,min(limit,100)); hours=max(1,min(hours,720))
+ if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' AND city=$1 AND created_at>=now()-($2::text||' hours')::interval ORDER BY created_at DESC LIMIT $3",city,hours,limit)
+ else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' AND created_at>=now()-($1::text||' hours')::interval ORDER BY created_at DESC LIMIT $2",hours,limit)
  return {"items":[feed_json(r) for r in rows]}
 
 @app.post("/api/reports")
