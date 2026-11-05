@@ -226,3 +226,5 @@ body.side-collapsed .maptools{left:18px}
 .directory-actions{display:flex;align-items:center;gap:10px}.directory-actions input{min-width:0;flex:1}.directory-actions button{flex:0 0 auto;padding:10px 12px;border:1px solid #72d9d044;border-radius:10px;background:#63dfd00e;color:#a8eee2;font:700 10px Manrope;cursor:pointer}.city-list[hidden]{display:none!important}
 .moscow-home{font:700 10px 'DM Mono';color:#86e7d9;white-space:nowrap}
 @media(max-width:650px){.directory-actions{align-items:stretch;flex-direction:column}.directory-actions button{align-self:flex-start}.moscow-home{display:none}}
+
+@media(max-width:760px){.moscow-clock{position:fixed;left:12px;bottom:calc(91px + env(safe-area-inset-bottom));z-index:9;background:#09273beF;box-shadow:0 8px 24px #0005}.side{transition:transform .22s ease,opacity .18s ease}}
