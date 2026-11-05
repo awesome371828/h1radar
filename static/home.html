@@ -37,11 +37,72 @@ h1{font-size:clamp(42px,5.7vw,76px);line-height:1.02;letter-spacing:-.065em;marg
 .faq{display:grid;grid-template-columns:1fr 1fr;gap:10px}.faq details{border:1px solid var(--line);border-radius:11px;padding:15px 17px;background:#17221b}.faq summary{font-size:12px;font-weight:800;cursor:pointer}.faq p{color:var(--muted);font-size:11px;line-height:1.75;margin:12px 0 0}
 @media(max-width:850px){.livebar{align-items:flex-start;flex-direction:column;margin-bottom:48px}.stats-grid{grid-template-columns:repeat(2,1fr)}.section-head{align-items:flex-start;flex-direction:column}.city-list{grid-template-columns:1fr 1fr}.workflow{grid-template-columns:1fr 1fr}.faq{grid-template-columns:1fr}}
 @media(max-width:480px){.city-list{grid-template-columns:1fr}.metric{padding:15px}.workflow{grid-template-columns:1fr 1fr}}
+
+/* H1 RADAR · новый фирменный визуальный слой */
+:root{color-scheme:dark;--bg:#07111f;--surface:#0d2035;--surface2:#132b43;--line:#28465f;--ink:#edf7ff;--muted:#91a9bf;--acid:#74e0d2;--orange:#ffb978;--mint:#a6e9d6}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{background:#07111f;color:var(--ink);font-family:Manrope,system-ui,sans-serif}
+body:before{opacity:.22;background-image:linear-gradient(#8fc7ee0c 1px,transparent 1px),linear-gradient(90deg,#8fc7ee0c 1px,transparent 1px);background-size:38px 38px;mask-image:linear-gradient(to bottom,#000,transparent 86%)}
+body:after{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 18% 14%,#0e7a8d33,transparent 32%),radial-gradient(ellipse at 78% 35%,#3155a833,transparent 36%),radial-gradient(ellipse at 55% 90%,#0e8c7930,transparent 30%);filter:blur(20px);animation:ambientDrift 18s ease-in-out infinite alternate}
+.shell{width:min(1320px,calc(100% - 56px))}
+header{height:82px;border-bottom-color:#a9d5ed22;backdrop-filter:blur(18px)}
+.brand{letter-spacing:.14em}.symbol{border-radius:12px;transform:none;background:linear-gradient(145deg,#236b83,#122e4c);border-color:#7de2d1;box-shadow:0 0 26px #63dfd022;color:#cffff2}
+nav{gap:30px;color:#a9c1d2}nav a{transition:color .2s}nav a:hover{color:#8ff1df}
+.status{color:#a4dccc}.status i{background:#64dfbd;box-shadow:0 0 14px #64dfbd}
+.button{border-radius:13px;transition:transform .2s,box-shadow .2s,border-color .2s}
+.button:hover{transform:translateY(-2px)}
+.button.primary{background:linear-gradient(135deg,#c8f4e9,#7bd9d0 55%,#91c6f4);color:#062235;box-shadow:0 12px 30px #58c9bb2b}
+.button.secondary{background:#ffffff09;border-color:#a4cde52d;color:#d9eaf7}
+.hero{padding:92px 0 82px;gap:62px;align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid #7be1d044;border-radius:999px;background:#63dfd00d;color:#9af1e2;font:10px 'DM Mono';letter-spacing:.14em}
+.eyebrow:before{content:"";width:7px;height:7px;border-radius:50%;background:#74e0d2;box-shadow:0 0 12px #74e0d2}
+.hero h1{font-size:clamp(42px,5.8vw,76px);line-height:1.04;letter-spacing:-.065em;margin:22px 0}
+.hero h1 em{font-style:normal;background:linear-gradient(90deg,#a9f0de,#7ccce8 58%,#b7c9ff);background-clip:text;-webkit-background-clip:text;color:transparent}
+.lead{max-width:630px;color:#a9bfd0;font-size:16px;line-height:1.8}
+.micro{color:#6f91a8;letter-spacing:.16em}
+.visual{min-height:410px;border:1px solid #a6d6e833;border-radius:30px;background:linear-gradient(145deg,#123d56d9,#0b1b31f0 65%,#142e4ad9);box-shadow:0 34px 90px #0008,inset 0 1px #ffffff20;overflow:hidden;position:relative;isolation:isolate}
+.visual:before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 52%,#3f9caa2b,transparent 52%),linear-gradient(120deg,transparent 35%,#72d9d51a 50%,transparent 65%);background-size:auto,220% 100%;animation:scanSheen 8s linear infinite}
+.visual-top,.visual-bottom{color:#91b2c8}.visual-top{border-bottom-color:#a9d5ed20}.visual-bottom{border-top-color:#a9d5ed20}
+.visual svg{width:100%;height:auto;filter:drop-shadow(0 0 18px #4bb8b31b)}
+.visual svg circle{transform-box:fill-box;transform-origin:center;animation:nodePulse 3s ease-in-out infinite}.visual svg circle:nth-of-type(2n){animation-delay:1s}
+.coord{color:#8ee7d9}
+.sectionline{padding:64px 0;border-top:1px solid #a6d6e822;border-bottom:1px solid #a6d6e822;gap:60px}
+.sectionline h2,.section-head h2{font-size:clamp(28px,3.2vw,42px);letter-spacing:-.05em}
+.sectionline p,.section-head p{color:#9db4c6;line-height:1.85}
+.features{gap:14px;margin:54px 0 82px}
+.feature{padding:25px 24px;border:1px solid #a5d4e626;border-radius:20px;background:linear-gradient(145deg,#14324cbd,#0b1d32db);box-shadow:inset 0 1px #ffffff10;transition:transform .22s,border-color .22s,background .22s}
+.feature:hover{transform:translateY(-5px);border-color:#76dccc70;background:linear-gradient(145deg,#19425abd,#0c223adb)}
+.feature b{color:#78e0d1;font:10px 'DM Mono';letter-spacing:.14em}.feature h3{font-size:20px;letter-spacing:-.03em}
+.feature p{color:#9db3c4;line-height:1.75}
+.livebar{padding:18px 21px;border:1px solid #6dd6c744;border-radius:17px;background:linear-gradient(100deg,#103b4bbd,#112744d9);box-shadow:0 15px 45px #0004}
+.signal{color:#9aefdf}.signal i{background:#69dfbd;box-shadow:0 0 14px #69dfbd}
+.livebar small{color:#9bb8c9}
+.livebar button{border:1px solid #73d9d044;border-radius:10px;background:#65daca14;color:#aaf2e4;padding:10px 13px;cursor:pointer}
+.data-section{padding:72px 0}
+.metric{border:1px solid #a3d3e626;border-radius:18px;background:linear-gradient(145deg,#14334dbb,#0b1e33e8);padding:24px}
+.metric b{color:#b3f0e1;font:700 32px 'DM Mono'}
+.metric span{color:#9db4c5}
+.city-directory{border:1px solid #a3d3e62b;border-radius:22px;background:#0b1d31d9;overflow:hidden;box-shadow:0 25px 65px #0005}
+.directory-top{background:#112c45;border-bottom-color:#a3d3e622}
+.directory-top input{background:#07192a;border-color:#9dcde32c;color:#eaf7ff;border-radius:11px}
+.city-item{border-bottom-color:#a3d3e617;transition:background .18s,padding .18s}.city-item:hover{background:#64d9ce12;padding-left:20px}
+.city-item small{color:#83a4b9}
+.workflow{gap:12px}
+.step{border:1px solid #a3d3e622;border-radius:18px;background:linear-gradient(145deg,#13334db5,#0b1e33d9);padding:23px}
+.step h3{color:#c6f4e9}.step p{color:#9db4c5;line-height:1.7}
+.faq details{border-bottom-color:#a3d3e622}.faq summary{color:#d9eaf5}.faq p{color:#9db4c5}
+.bottom{border-top-color:#a3d3e622;color:#829caf}
+@keyframes ambientDrift{from{transform:translate3d(-2%,0,0) scale(1)}to{transform:translate3d(2%,2%,0) scale(1.06)}}
+@keyframes scanSheen{from{background-position:0 0,100% 0}to{background-position:0 0,-120% 0}}
+@keyframes nodePulse{0%,100%{opacity:.75;scale:1}50%{opacity:1;scale:1.12}}
+@media(max-width:900px){.hero{padding:60px 0;gap:35px}.visual{min-height:320px}.sectionline{gap:25px}}
+@media(max-width:650px){.shell{width:calc(100% - 32px)}header{height:auto;min-height:72px;flex-wrap:wrap;padding:12px 0;gap:12px}nav{order:3;width:100%;justify-content:space-between;gap:10px;font-size:10px}.header-actions{gap:8px}.status{display:none}.hero{padding:48px 0 55px}.hero h1{font-size:clamp(38px,11vw,56px)}.lead{font-size:14px}.visual{min-height:260px;border-radius:22px}.sectionline{display:block;padding:42px 0}.features{grid-template-columns:1fr;margin:35px 0 50px}.data-section{padding:48px 0}.stats-grid{grid-template-columns:1fr 1fr}.metric{padding:17px}.metric b{font-size:26px}.livebar{gap:12px}.bottom{gap:14px;flex-direction:column;align-items:flex-start}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style></head>
 <body><div class="shell">
 <header><a class="brand" href="/"><span class="symbol">H1</span><span>H1 RADAR<small>СООБЩЕСТВЕННАЯ КАРТА</small></span></a>
 <nav><a href="#about">О проекте</a><a href="#principles">Принципы</a><a href="https://moder.h1radar.relaxdev.ru/">Команда</a></nav>
-<div class="header-actions"><span class="status"><i></i> СИСТЕМА ДОСТУПНА</span><a class="button primary" href="https://map.h1radar.relaxdev.ru/">Открыть радар <span>↗</span></a></div></header>
+<div class="header-actions"><span class="status"><i></i> СИСТЕМА ДОСТУПНА</span><span id="homeMoscowClock" class="status moscow-home">МСК --:--:--</span><a class="button primary" href="https://map.h1radar.relaxdev.ru/">Открыть радар <span>↗</span></a></div></header>
 <main>
 <section class="hero"><div><div class="eyebrow">H1 / независимый проект</div><h1>Смотри на обстановку.<br><em>Делись тем, что знаешь.</em></h1><p class="lead">H1 RADAR объединяет карту, сообщения жителей и городские обсуждения в одном пространстве. Информация сообщества помогает ориентироваться, а подтверждения отделяют единичные сообщения от коллективных наблюдений.</p><div class="hero-actions"><a class="button primary" href="https://map.h1radar.relaxdev.ru/">Перейти к карте <span>↗</span></a><a class="button secondary" href="#about">Как это работает</a></div><div class="micro">РОССИЯ · КАРТА · СООБЩЕНИЯ · СООБЩЕСТВА</div></div>
 <div class="visual" aria-label="Абстрактная схема карты H1 RADAR"><div class="visual-top"><span>H1 / FIELD VIEW</span><span>01 — RUSSIA</span></div>
@@ -71,10 +132,10 @@ h1{font-size:clamp(42px,5.7vw,76px);line-height:1.02;letter-spacing:-.065em;marg
 </div>
 <script>
 (()=>{const API='/api';const fmt=n=>new Intl.NumberFormat('ru-RU').format(Number(n)||0);const $=id=>document.getElementById(id);
-async function loadStats(){const label=$('statsUpdated');try{const r=await fetch(API+'/public/overview',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();$('statCities').textContent=fmt(d.cities);$('statMembers').textContent=fmt(d.members);$('statReports').textContent=fmt(d.published_24h);$('statChats').textContent=fmt(d.chat_24h);label.textContent='Обновлено '+new Date(d.updated_at).toLocaleString('ru-RU')+' · онлайн сейчас: '+fmt(d.online); }catch(e){label.textContent='Не удалось получить статистику. Данные не подменяются демонстрационными значениями.';}}
+async function loadStats(){const label=$('statsUpdated');try{const r=await fetch(API+'/public/overview',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();$('statCities').textContent=fmt(d.cities);$('statMembers').textContent=fmt(d.members);$('statReports').textContent=fmt(d.published_24h);$('statChats').textContent=fmt(d.chat_24h);label.textContent='Обновлено '+new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date(d.updated_at))+' МСК · онлайн сейчас: '+fmt(d.online); }catch(e){label.textContent='Не удалось получить статистику. Данные не подменяются демонстрационными значениями.';}}
 let allCities=[];async function loadCities(){const box=$('cityDirectory'),count=$('cityCount');try{const r=await fetch(API+'/cities',{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();allCities=Array.isArray(d.cities)?d.cities:[];renderCities();}catch(e){box.innerHTML='<div class="directory-foot">Каталог временно недоступен. Попробуй обновить страницу.</div>';count.textContent='Нет соединения с API каталога.';}}
 function renderCities(){const q=$('cityFilter').value.trim().toLocaleLowerCase('ru');const rows=allCities.filter(c=>(c.name+' '+(c.region||'')).toLocaleLowerCase('ru').includes(q));$('cityDirectory').innerHTML=rows.length?rows.map(c=>'<a class="city-item" href="https://map.h1radar.relaxdev.ru/?city='+encodeURIComponent(c.name)+'"><span>'+escapeHtml(c.name)+'<small>'+escapeHtml(c.region||'Россия')+'</small></span><span>↗</span></a>').join(''):'<div class="directory-foot">Ничего не найдено.</div>';$('cityCount').textContent='Показано '+fmt(rows.length)+' из '+fmt(allCities.length)+' населённых пунктов';}
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-$('statsRefresh').addEventListener('click',loadStats);$('cityFilter').addEventListener('input',renderCities);loadStats();loadCities();setInterval(loadStats,60000);
+$('statsRefresh').addEventListener('click',loadStats);$('cityFilter').addEventListener('input',renderCities);function clock(){const e=$('homeMoscowClock');if(e)e.textContent='МСК '+new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Moscow',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date());}clock();setInterval(clock,1000);loadStats();loadCities();setInterval(()=>{if(!document.hidden)loadStats()},30000);setInterval(()=>{if(!document.hidden)loadCities()},120000);
 })();
 </script></body></html>
