@@ -376,20 +376,39 @@ async def start(m:Message):
   nonce=payload[1][6:]
   valid=await pool.fetchval("UPDATE login_challenges SET telegram_id=$2 WHERE nonce=$1 AND expires_at>now() AND consumed_at IS NULL RETURNING nonce",nonce,m.from_user.id)
   if valid:
-   await m.answer("✅ <b>Вход подтверждён</b>\n\nВозвращайся на страницу H1 RADAR. Карта откроется автоматически.",reply_markup=app_kb(),parse_mode="HTML")
+   await m.answer("✅ <b>Вход подтверждён</b>\n\nТвой аккаунт H1 RADAR готов. Вернись на страницу карты — доступ откроется автоматически.\n\nЕсли страница ещё открыта, ничего дополнительно нажимать не нужно.",reply_markup=app_kb(),parse_mode="HTML")
    return
- greeting="Аккаунт H1 RADAR создан." if fresh else "С возвращением в H1 RADAR."
- await m.answer(f"🛰 <b>H1 RADAR</b>\n\n{greeting}\nВаш персональный код: <code>{code}</code>\n\nДля просмотра карты войди через Telegram на странице проекта. После входа карта и городские разделы станут доступны.\n\n<i>H1 RADAR — гражданская платформа, не официальный источник экстренных оповещений.</i>",reply_markup=app_kb(),parse_mode="HTML")
+  await m.answer("⌛ <b>Ссылка входа устарела</b>\n\nОткрой карту H1 RADAR и нажми «Войти через Telegram» ещё раз.",reply_markup=app_kb(),parse_mode="HTML")
+  return
+ greeting="Аккаунт создан автоматически." if fresh else "Рады снова видеть тебя."
+ await m.answer(
+  f"🛰 <b>H1 RADAR</b>\n<i>Гражданская карта и городские сообщества</i>\n\n{greeting}\n\n"
+  f"Твой код участника: <code>{code}</code>\n\n"
+  "Нажми кнопку ниже, чтобы открыть карту. При первом входе сайт подтвердит аккаунт через этот чат. "
+  "После подтверждения карта, городская лента и чат станут доступны.\n\n"
+  "<i>Сервис носит информационный характер и не заменяет официальные экстренные оповещения.</i>",
+  reply_markup=app_kb(),parse_mode="HTML"
+ )
 
 @dp.message(Command("help"))
 async def help_cmd(m:Message):
- await m.answer("🛰 <b>H1 RADAR — помощь</b>\n\n/start — создать аккаунт или открыть карту\n\nЧтобы войти на сайт:\n1. Открой страницу карты.\n2. Нажми «Войти через Telegram».\n3. Перейди в этого бота и нажми Start.\n4. Вернись на страницу — доступ включится автоматически.\n\nКоманда /start также показывает твой персональный код.",reply_markup=app_kb(),parse_mode="HTML")
+ await m.answer(
+  "🛰 <b>Помощь H1 RADAR</b>\n\n"
+  "<b>Как войти</b>\n"
+  "1. Открой карту H1 RADAR.\n"
+  "2. Нажми «Войти через Telegram».\n"
+  "3. В открывшемся боте нажми Start.\n"
+  "4. Вернись на сайт — карта откроется автоматически.\n\n"
+  "<b>Команды</b>\n/start — регистрация и вход\n/help — эта справка\n\n"
+  "Персональный код участника доступен в сообщении /start и в профиле на сайте.",
+  reply_markup=app_kb(),parse_mode="HTML"
+ )
 
 async def expire_pending_reports():
  while True:
   try:
    if pool is not None:
-    result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '5 minutes'")
+    result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '3 minutes'")
     if result!="DELETE 0": log.info("Expired unconfirmed marks: %s",result)
     await pool.execute("DELETE FROM login_challenges WHERE expires_at<now() OR consumed_at IS NOT NULL")
     await pool.execute("DELETE FROM web_sessions WHERE expires_at<now()")
@@ -399,7 +418,6 @@ async def expire_pending_reports():
    log.exception("Pending mark cleanup failed")
   await asyncio.sleep(20)
 
-@asynccontextmanager
 async def run_polling_forever():
  # aiogram retries transient getUpdates errors internally; this supervisor also recovers
  # from unexpected dispatcher exits instead of leaving the API alive with a dead bot.
@@ -413,6 +431,7 @@ async def run_polling_forever():
    log.exception("Telegram polling crashed; restarting in 5 seconds")
   await asyncio.sleep(5)
 
+@asynccontextmanager
 async def lifespan(app:FastAPI):
  global pool,bot,polling_task,cleanup_task
  pool=await asyncpg.create_pool(DATABASE_URL,min_size=2,max_size=int(os.getenv("DB_POOL_SIZE","12")),command_timeout=15,ssl=False,statement_cache_size=0,max_inactive_connection_lifetime=300)
