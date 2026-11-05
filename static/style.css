@@ -170,3 +170,6 @@ main{height:100dvh;min-height:0;display:block;padding:0}
 .map-actions{display:none!important}
 
 .map-pick-hint{position:fixed;z-index:10;top:160px;left:50%;transform:translateX(-50%);padding:11px 17px;border:1px solid #b5d9ff70;border-radius:999px;background:linear-gradient(120deg,#153d60ed,#0c2745ed);color:#eaf5ff;font:700 12px Inter,sans-serif;box-shadow:0 12px 35px #0008,0 0 24px #69baff20;backdrop-filter:blur(16px);pointer-events:none;white-space:nowrap}.map-pick-hint[hidden]{display:none}@media(max-width:760px){.map-pick-hint{top:125px;max-width:calc(100vw - 24px);font-size:10px;white-space:normal;text-align:center}}
+
+/* H1: calm live radar polish */
+.item{transition:transform .18s ease,border-color .18s ease,background .18s ease}.item:hover{transform:translateY(-1px);border-color:#a6c8e566;background:#ffffff0d}.map-report{box-shadow:0 12px 34px #5aaeff33,0 0 0 1px #ffffff55;transition:transform .2s ease,box-shadow .2s ease}.map-report:hover{transform:translateY(-2px);box-shadow:0 16px 40px #5aaeff55,0 0 0 1px #ffffff77}.report-types button{backdrop-filter:blur(14px)}.report-types button.selected{box-shadow:0 0 0 1px #b8dcff55,inset 0 0 22px #73bfff18}.map-pick-hint{animation:hintIn .24s ease both}@keyframes hintIn{from{opacity:0;transform:translate(-50%,-7px)}to{opacity:1;transform:translate(-50%,0)}}
