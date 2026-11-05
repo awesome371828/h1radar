@@ -51,6 +51,7 @@ pool: asyncpg.Pool|None=None
 bot: Bot|None=None
 dp=Dispatcher()
 polling_task: asyncio.Task|None=None
+cleanup_task: asyncio.Task|None=None
 
 SCHEMA="""
 CREATE TABLE IF NOT EXISTS users(
@@ -242,7 +243,7 @@ def user_json(r):
 
 def feed_json(r):
  return {"id":r["id"],"city":r["city"],"category":r["category"],
- "description":r["description"],"latitude":r["latitude"] if "latitude" in r.keys() else None,"longitude":r["longitude"] if "longitude" in r.keys() else None,"confirmations":r["confirmations"] if "confirmations" in r.keys() else 1,"created_at":r["created_at"].isoformat()}
+ "description":r["description"],"latitude":r["latitude"] if "latitude" in r.keys() else None,"longitude":r["longitude"] if "longitude" in r.keys() else None,"confirmations":r["confirmations"] if "confirmations" in r.keys() else 1,"status":r["status"] if "status" in r.keys() else "published","created_at":r["created_at"].isoformat()}
 
 def app_kb(path: str = ""):
  url=MAP_URL + (path if path.startswith("/") else ("/"+path if path else ""))
@@ -290,8 +291,21 @@ async def help_cmd(m:Message):
  await m.answer("/start — открыть H1 RADAR и войти\n/help — помощь по входу и использованию карты")
 
 @asynccontextmanager
+async def expire_pending_reports():
+ while True:
+  try:
+   if pool is not None:
+    result=await pool.execute("DELETE FROM reports WHERE status='pending' AND created_at<now()-interval '3 minutes'")
+    if result!="DELETE 0": log.info("Expired unconfirmed marks: %s",result)
+  except asyncio.CancelledError:
+   raise
+  except Exception:
+   log.exception("Pending mark cleanup failed")
+  await asyncio.sleep(20)
+
+@asynccontextmanager
 async def lifespan(app:FastAPI):
- global pool,bot,polling_task
+ global pool,bot,polling_task,cleanup_task
  pool=await asyncpg.create_pool(DATABASE_URL,min_size=1,max_size=int(os.getenv("DB_POOL_SIZE","10")),command_timeout=8,ssl=False,statement_cache_size=0)
  async with pool.acquire() as c: await c.execute(SCHEMA)
  bot=Bot(BOT_TOKEN)
@@ -304,7 +318,11 @@ async def lifespan(app:FastAPI):
  except Exception:
   log.exception("Could not configure Telegram bot profile/menu; polling will continue")
  polling_task=asyncio.create_task(dp.start_polling(bot,handle_signals=False))
+ cleanup_task=asyncio.create_task(expire_pending_reports())
  yield
+ if cleanup_task:
+  cleanup_task.cancel()
+  await asyncio.gather(cleanup_task,return_exceptions=True)
  if polling_task: polling_task.cancel()
  if bot: await bot.session.close()
  if pool: await pool.close()
@@ -383,8 +401,9 @@ async def cities():
 @app.get("/api/feed")
 async def feed(city:str|None=None,limit:int=50,hours:int=24):
  limit=max(1,min(limit,100)); hours=max(1,min(hours,720))
- if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' AND city=$1 AND created_at>=now()-($2::text||' hours')::interval ORDER BY created_at DESC LIMIT $3",city,hours,limit)
- else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' AND created_at>=now()-($1::text||' hours')::interval ORDER BY created_at DESC LIMIT $2",hours,limit)
+ # Pending marks are visible to everyone for their three-minute confirmation window.
+ if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND city=$1 AND created_at>=now()-($2::text||' hours')::interval ORDER BY created_at DESC LIMIT $3",city,str(hours),limit)
+ else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND created_at>=now()-($1::text||' hours')::interval ORDER BY created_at DESC LIMIT $2",str(hours),limit)
  return {"items":[feed_json(r) for r in rows]}
 
 @app.post("/api/reports")
@@ -398,13 +417,16 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
  async with pool.acquire() as c:
   async with c.transaction():
    await c.execute("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))",city,body.category)
+   last_mark=await c.fetchval("SELECT created_at FROM reports WHERE author_id=$1 AND created_at>now()-interval '3 minutes' ORDER BY created_at DESC LIMIT 1",u["telegram_id"])
+   if last_mark:
+    raise HTTPException(429,"Одну отметку можно отправлять раз в 3 минуты. Попробуй немного позже.")
    nearby=None
    if lat is not None and lon is not None:
     nearby=await c.fetchrow("""SELECT id,author_id FROM reports
      WHERE status='pending' AND city=$1 AND category=$2
      AND latitude BETWEEN $3-0.015 AND $3+0.015
      AND longitude BETWEEN $4-0.02 AND $4+0.02
-     AND created_at>now()-interval '30 minutes'
+     AND created_at>now()-interval '3 minutes'
      ORDER BY created_at DESC LIMIT 1 FOR UPDATE""",city,body.category,lat,lon)
    if nearby:
     if nearby["author_id"]==u["telegram_id"]:
@@ -451,7 +473,7 @@ async def mod_events(authorization:str|None=Header(default=None),q:str="",hours:
  FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id
  WHERE r.created_at>=now()-($1::text||' hours')::interval
  AND ($2='' OR r.city ILIKE $3 OR r.category ILIKE $3 OR r.description ILIKE $3 OR u.username ILIKE $3 OR u.public_code ILIKE $3)
- ORDER BY r.created_at DESC LIMIT 500""",hours,q,"%"+q+"%")
+ ORDER BY r.created_at DESC LIMIT 500""",str(hours),q,"%"+q+"%")
  return {"items":[{**feed_json(r),"status":r["status"],"author_code":r["public_code"],"username":r["username"],"telegram_id":r["telegram_id"]} for r in rows]}
 
 @app.get("/api/moderation/marks")
