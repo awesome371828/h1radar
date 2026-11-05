@@ -91,6 +91,18 @@ class ModerationExpansionTests(unittest.TestCase):
         self.assertIn("/api/moderation/users/{telegram_id}/restriction", paths)
         self.assertIn("/api/moderation/chat", paths)
 
+    def test_moderation_user_directory_exposes_restriction_state(self):
+        self.assertIn("restriction_expires_at", h1.app.openapi_json() if hasattr(h1.app, "openapi_json") else h1.SCHEMA + open("h1.py", encoding="utf-8").read())
+
+    def test_city_edit_restriction_and_chat_moderation_ui_are_present(self):
+        from pathlib import Path
+        html = (Path(__file__).resolve().parents[1] / "static" / "moderation.html").read_text(encoding="utf-8")
+        self.assertIn('data-city-edit', html)
+        self.assertIn('data-restrict', html)
+        self.assertIn('data-unrestrict', html)
+        self.assertIn('id="chatSearch"', html)
+        self.assertIn('"/moderation/chat?city="', html)
+
 
 if __name__ == "__main__":
     unittest.main()
