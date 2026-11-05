@@ -214,7 +214,7 @@ async def start(m:Message):
 
 @dp.message(Command("help"))
 async def help_cmd(m:Message):
- await m.answer("/start — регистрация и вход\n/radar — открыть карту в браузере\n/moderation — панель модерации")
+ await m.answer("/start — открыть H1 RADAR и войти\n/help — помощь по входу и использованию карты")
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
