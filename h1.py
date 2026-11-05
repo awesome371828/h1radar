@@ -724,8 +724,8 @@ async def mod_summary(authorization:str|None=Header(default=None)):
 
 @app.get("/api/moderation/reports")
 async def mod_reports(authorization:str|None=Header(default=None)):
- await moderator(authorization,"events")
- rows=await pool.fetch("""SELECT r.id,r.city,r.category,r.description,r.created_at,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='pending' AND ($1 OR EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$2 AND p.permission='events' AND c.name=r.city)) ORDER BY r.created_at LIMIT 100""", (await current_user(authorization))["role"]=="owner", (await current_user(authorization))["telegram_id"])
+ actor=await moderator(authorization,"events")
+ rows=await pool.fetch("""SELECT r.id,r.city,r.category,r.description,r.created_at,u.public_code FROM reports r LEFT JOIN users u ON u.telegram_id=r.author_id WHERE r.status='pending' AND ($1 OR EXISTS(SELECT 1 FROM moderator_city_permissions p JOIN cities c ON c.id=p.city_id WHERE p.telegram_id=$2 AND p.permission='events' AND c.name=r.city)) ORDER BY r.created_at LIMIT 100""",actor["role"]=="owner",actor["telegram_id"])
  return {"items":[{**feed_json(r),"author_code":r["public_code"]} for r in rows]}
 
 @app.get("/api/moderation/events")
