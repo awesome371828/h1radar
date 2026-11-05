@@ -7,7 +7,7 @@ import asyncpg
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (Message, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonDefault)
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +57,15 @@ CREATE TABLE IF NOT EXISTS users(
  role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user','moderator','owner')),
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS login_challenges(
+ nonce TEXT PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ expires_at TIMESTAMPTZ NOT NULL, telegram_id BIGINT, consumed_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS web_sessions(
+ token_hash TEXT PRIMARY KEY, telegram_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(), expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS web_sessions_expiry_idx ON web_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS reports(
  id BIGSERIAL PRIMARY KEY, author_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,
  city TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('alert','all_clear','shelter','info')),
@@ -137,12 +146,14 @@ def verify_init_data(raw:str)->dict:
  return user
 
 async def current_user(auth:str|None):
- if not auth or not auth.startswith("tma "): raise HTTPException(401,"Откройте приложение через Telegram.")
- try: tg=verify_init_data(auth[4:])
- except Exception: raise HTTPException(401,"Не удалось проверить Telegram-сессию. Перезапустите приложение.")
- row=await pool.fetchrow("SELECT * FROM users WHERE telegram_id=$1",int(tg["id"]))
- if not row: raise HTTPException(403,"Сначала подтвердите номер телефона в боте командой /start.")
- await pool.execute("UPDATE users SET last_seen_at=now(),username=$2 WHERE telegram_id=$1",int(tg["id"]),tg.get("username"))
+ if not auth or not auth.startswith("Bearer "):
+  raise HTTPException(401,"Войдите через Telegram.")
+ token=auth[7:].strip()
+ if len(token)<32 or len(token)>256: raise HTTPException(401,"Недействительная сессия.")
+ token_hash=hashlib.sha256(token.encode()).hexdigest()
+ row=await pool.fetchrow("SELECT u.* FROM web_sessions s JOIN users u ON u.telegram_id=s.telegram_id WHERE s.token_hash=$1 AND s.expires_at>now()",token_hash)
+ if not row: raise HTTPException(401,"Сессия истекла. Войдите через Telegram ещё раз.")
+ await pool.execute("UPDATE users SET last_seen_at=now() WHERE telegram_id=$1",row["telegram_id"])
  return row
 
 async def moderator(auth:str|None):
@@ -189,8 +200,15 @@ async def configure_bot_profile(b:Bot):
 @dp.message(CommandStart())
 async def start(m:Message):
  code,fresh=await ensure_user(m.from_user)
+ payload=(m.text or "").split(maxsplit=1)
+ if len(payload)>1 and payload[1].startswith("login_"):
+  nonce=payload[1][6:]
+  valid=await pool.fetchval("UPDATE login_challenges SET telegram_id=$2 WHERE nonce=$1 AND expires_at>now() AND consumed_at IS NULL RETURNING nonce",nonce,m.from_user.id)
+  if valid:
+   await m.answer("Вход подтверждён. Возвращайтесь во вкладку браузера — сайт завершит авторизацию автоматически.",reply_markup=app_kb())
+   return
  greeting="Аккаунт H1 RADAR создан." if fresh else "С возвращением в H1 RADAR."
- await m.answer(f"{greeting}\nВаш код: <b>{code}</b>\n\nКарта открывается в обычном браузере — без Telegram Mini App.",reply_markup=app_kb(),parse_mode="HTML")
+ await m.answer(f"{greeting}\\nВаш код: <b>{code}</b>\\n\\nКарта открывается в обычном браузере — без Telegram Mini App.",reply_markup=app_kb(),parse_mode="HTML")
 
 @dp.message(Command("radar"))
 async def radar(m:Message):
@@ -215,6 +233,9 @@ async def lifespan(app:FastAPI):
  async with pool.acquire() as c: await c.execute(SCHEMA)
  bot=Bot(BOT_TOKEN)
  try:
+  global BOT_USERNAME
+  if not BOT_USERNAME:
+   me=await bot.get_me(); BOT_USERNAME=me.username or ""
   await configure_bot_profile(bot)
   log.info("Telegram bot profile configured; reply keyboards and Mini App menu disabled")
  except Exception:
@@ -230,7 +251,14 @@ app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL,MAP_URL],allow_crede
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
-async def index():
+async def index(request:Request):
+    host=request.headers.get("host","").split(":")[0].lower()
+    if host.startswith("map.") or request.query_params.get("view")=="map":
+        return FileResponse("static/index.html")
+    return FileResponse("static/home.html")
+
+@app.get("/map")
+async def map_page():
     return FileResponse("static/index.html")
 
 
@@ -245,6 +273,32 @@ async def privacy():
 
 @app.get("/api/health")
 async def health(): return {"ok":True,"service":"h1-radar","time":datetime.now(timezone.utc).isoformat()}
+
+@app.get("/api/config")
+async def public_config():
+ return {"bot_username":BOT_USERNAME,"map_url":MAP_URL}
+
+@app.post("/api/auth/start")
+async def auth_start():
+ if not BOT_USERNAME: raise HTTPException(503,"Бот ещё запускается. Попробуйте снова.")
+ nonce=secrets.token_urlsafe(24)
+ await pool.execute("INSERT INTO login_challenges(nonce,expires_at) VALUES($1,now()+interval '10 minutes')",nonce)
+ return {"ok":True,"nonce":nonce,"bot_url":f"https://t.me/{BOT_USERNAME}?start=login_{nonce}"}
+
+@app.get("/api/auth/poll")
+async def auth_poll(nonce:str):
+ if not re.fullmatch(r"[A-Za-z0-9_-]{20,80}",nonce): raise HTTPException(400,"Некорректный запрос входа.")
+ async with pool.acquire() as c:
+  async with c.transaction():
+   challenge=await c.fetchrow("SELECT telegram_id,expires_at,consumed_at FROM login_challenges WHERE nonce=$1 FOR UPDATE",nonce)
+   if not challenge or challenge["expires_at"]<=datetime.now(timezone.utc) or challenge["consumed_at"]:
+    raise HTTPException(410,"Ссылка входа истекла. Начните заново.")
+   if not challenge["telegram_id"]: return {"ok":True,"pending":True}
+   token=secrets.token_urlsafe(40)
+   digest=hashlib.sha256(token.encode()).hexdigest()
+   await c.execute("INSERT INTO web_sessions(token_hash,telegram_id,expires_at) VALUES($1,$2,now()+interval '30 days')",digest,challenge["telegram_id"])
+   await c.execute("UPDATE login_challenges SET consumed_at=now() WHERE nonce=$1",nonce)
+   return {"ok":True,"pending":False,"token":token}
 
 @app.get("/api/me")
 async def me(authorization:str|None=Header(default=None)):
