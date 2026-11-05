@@ -391,9 +391,28 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
  city=body.city.strip(); desc=body.description.strip()
  if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
   raise HTTPException(400,"Выберите город из списка.")
- r=await pool.fetchrow("INSERT INTO reports(author_id,city,category,description,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",u["telegram_id"],city,body.category,desc,round(body.latitude,2) if body.latitude is not None else None,round(body.longitude,2) if body.longitude is not None else None)
- await pool.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",r["id"],u["telegram_id"])
- return {"ok":True,"id":r["id"],"status":"pending","confirmations":1,"message":"Отметка сохранена. Она появится после подтверждений других пользователей или проверки модератором."}
+ lat=round(body.latitude,2) if body.latitude is not None else None
+ lon=round(body.longitude,2) if body.longitude is not None else None
+ async with pool.acquire() as c:
+  async with c.transaction():
+   nearby=None
+   if lat is not None and lon is not None:
+    nearby=await c.fetchrow("""SELECT id,author_id FROM reports
+     WHERE status='pending' AND city=$1 AND category=$2
+     AND latitude BETWEEN $3-0.015 AND $3+0.015
+     AND longitude BETWEEN $4-0.02 AND $4+0.02
+     AND created_at>now()-interval '30 minutes'
+     ORDER BY created_at DESC LIMIT 1 FOR UPDATE""",city,body.category,lat,lon)
+   if nearby:
+    if nearby["author_id"]==u["telegram_id"]:
+     raise HTTPException(409,"Ты уже отправлял отметку рядом. Дождись подтверждений других людей.")
+    await c.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",nearby["id"],u["telegram_id"])
+    count=await c.fetchval("SELECT count(*) FROM report_confirmations WHERE report_id=$1",nearby["id"])
+    await c.execute("UPDATE reports SET confirmations=$2,status=CASE WHEN $2>=3 THEN 'published' ELSE status END,reviewed_at=CASE WHEN $2>=3 THEN now() ELSE reviewed_at END WHERE id=$1",nearby["id"],count)
+    return {"ok":True,"id":nearby["id"],"status":"published" if count>=3 else "pending","confirmations":count,"message":"Отметка подтверждена и опубликована." if count>=3 else f"Ты подтвердил отметку. Сейчас подтверждений: {count}/3."}
+   row=await c.fetchrow("INSERT INTO reports(author_id,city,category,description,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",u["telegram_id"],city,body.category,desc,lat,lon)
+   await c.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",row["id"],u["telegram_id"])
+ return {"ok":True,"id":row["id"],"status":"pending","confirmations":1,"message":"Отметка сохранена. Она появится после отметок ещё двух разных людей рядом или проверки модератором."}
 
 @app.post("/api/reports/{report_id}/confirm")
 async def confirm_report(report_id:int,authorization:str|None=Header(default=None)):
