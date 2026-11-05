@@ -6,8 +6,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 import asyncpg
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import (Message, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, BotCommand,
-    InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, MenuButtonWebApp)
+from aiogram.types import (Message, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonDefault)
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,8 +39,9 @@ def normalize_webapp_url(value: str | None) -> str:
   raise ValueError("WEBAPP_URL must be a valid public HTTPS URL, e.g. https://h1radar.relaxdev.ru") from exc
  return urlunsplit(("https",parts.netloc,parts.path.rstrip("/"),parts.query,parts.fragment))
 
-WEBAPP_URL=normalize_webapp_url(os.getenv("WEBAPP_URL"))
-log.info("Telegram Mini App public URL: %s", WEBAPP_URL)
+WEBAPP_URL=normalize_webapp_url(os.getenv("WEBAPP_URL","https://map.h1radar.relaxdev.ru"))
+MAP_URL=os.getenv("MAP_URL","https://map.h1radar.relaxdev.ru").strip().rstrip("/")
+log.info("Public H1 RADAR map URL: %s", MAP_URL)
 DATABASE_URL=os.environ["DATABASE_URL"]
 BOT_USERNAME=os.getenv("BOT_USERNAME","").lstrip("@")
 INITDATA_MAX_AGE=int(os.getenv("TG_INITDATA_MAX_AGE","86400"))
@@ -158,69 +158,55 @@ def feed_json(r):
  return {"id":r["id"],"city":r["city"],"category":r["category"],
  "description":r["description"],"created_at":r["created_at"].isoformat()}
 
-def app_kb():
- return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛰 Открыть H1 RADAR",web_app=WebAppInfo(url=WEBAPP_URL))]])
+def app_kb(path: str = ""):
+ url=MAP_URL + (path if path.startswith("/") else ("/"+path if path else ""))
+ return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛰 Открыть H1 RADAR",url=url)]])
 
-def app_reply_kb():
- return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🛰 Открыть H1 RADAR",web_app=WebAppInfo(url=WEBAPP_URL))]],resize_keyboard=True,is_persistent=True,input_field_placeholder="Открыть H1 RADAR")
+async def ensure_user(u):
+ name=" ".join(x for x in [u.first_name,u.last_name] if x) or "Пользователь"
+ role="owner" if u.id==BOT_OWNER else "user"
+ row=await pool.fetchrow("SELECT public_code FROM users WHERE telegram_id=$1",u.id)
+ if row:
+  await pool.execute("UPDATE users SET username=$2,display_name=$3,last_seen_at=now(),role=CASE WHEN $1=$4 THEN 'owner' ELSE role END WHERE telegram_id=$1",u.id,u.username,name,BOT_OWNER)
+  return row["public_code"],False
+ for _ in range(40):
+  code="RU-"+ "".join(secrets.choice(string.ascii_uppercase+string.digits) for _ in range(4))
+  try:
+   await pool.execute("INSERT INTO users(telegram_id,username,display_name,phone,public_code,role) VALUES($1,$2,$3,'',$4,$5)",u.id,u.username,name,code,role)
+   return code,True
+  except asyncpg.UniqueViolationError:
+   continue
+ raise RuntimeError("Не удалось выделить уникальный код пользователя")
 
 async def configure_bot_profile(b:Bot):
  await b.set_my_name("H1 RADAR")
- await b.set_my_description("H1 RADAR — гражданская карта России. Просматривайте проверенные сообщения сообщества, выбирайте город и отправляйте информацию на модерацию. Не является официальным источником экстренных оповещений.")
- await b.set_my_short_description("Гражданская карта России и лента проверенных сообщений.")
- await b.set_my_commands([BotCommand(command="start",description="Запустить бота и открыть H1 RADAR"),BotCommand(command="radar",description="Открыть карту в Telegram"),BotCommand(command="moderation",description="Панель модерации"),BotCommand(command="help",description="Помощь")])
- await b.set_chat_menu_button(menu_button=MenuButtonWebApp(text="H1 RADAR",web_app=WebAppInfo(url=WEBAPP_URL)))
+ await b.set_my_description("H1 RADAR — гражданская карта и лента сообщений сообщества. Не является официальным источником экстренных оповещений.")
+ await b.set_my_short_description("Гражданская карта и сообщения сообщества.")
+ await b.set_my_commands([BotCommand(command="start",description="Создать аккаунт и открыть сайт"),BotCommand(command="radar",description="Открыть карту в браузере"),BotCommand(command="moderation",description="Панель модерации"),BotCommand(command="help",description="Помощь")])
+ # Убираем прежнюю кнопку Mini App из меню Telegram.
+ await b.set_chat_menu_button(menu_button=MenuButtonDefault())
 
 @dp.message(CommandStart())
 async def start(m:Message):
- row=await pool.fetchrow("SELECT * FROM users WHERE telegram_id=$1",m.from_user.id)
- if row:
-  await m.answer(f"С возвращением! Ваш код H1: <b>{row['public_code']}</b>\\n\\nНажмите кнопку «Открыть H1 RADAR» внизу чата.",reply_markup=app_reply_kb(),parse_mode="HTML"); await m.answer("Открыть приложение:",reply_markup=app_kb()); return
- kb=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Подтвердить номер телефона",request_contact=True)]],
-  resize_keyboard=True,one_time_keyboard=True)
- await m.answer(f"Добро пожаловать в <b>H1 RADAR</b>.\n\nПодтвердите собственный российский номер кнопкой ниже. Принимаются только номера +7. Контакт используется для защиты от автоматических регистраций.\n<a href=\"{WEBAPP_URL}/privacy\">Политика конфиденциальности</a>.",reply_markup=kb,parse_mode="HTML")
-
-@dp.message(F.contact)
-async def contact(m:Message):
- if not m.from_user or not m.contact or m.contact.user_id!=m.from_user.id:
-  await m.answer("Отправьте собственный контакт через кнопку подтверждения.",reply_markup=ReplyKeyboardRemove()); return
- phone=ru_phone(m.contact.phone_number)
- if not phone:
-  await m.answer("Нужен российский номер +7XXXXXXXXXX.",reply_markup=ReplyKeyboardRemove()); return
- u=m.from_user; name=" ".join(x for x in [u.first_name,u.last_name] if x) or "Пользователь"
- role="owner" if u.id==BOT_OWNER else "user"
- existing=await pool.fetchrow("SELECT public_code FROM users WHERE telegram_id=$1",u.id)
- if existing:
-  code=existing["public_code"]
-  if u.id==BOT_OWNER:
-   await pool.execute("UPDATE users SET role='owner',phone=$2,username=$3,display_name=$4 WHERE telegram_id=$1",u.id,phone,u.username,name)
- else:
-  code=None
-  for _ in range(30):
-   candidate="RU-"+ "".join(secrets.choice(string.ascii_uppercase+string.digits) for _ in range(4))
-   try:
-    await pool.execute("INSERT INTO users(telegram_id,username,display_name,phone,public_code,role) VALUES($1,$2,$3,$4,$5,$6)",u.id,u.username,name,phone,candidate,role)
-    code=candidate; break
-   except asyncpg.UniqueViolationError: continue
-  if not code: raise RuntimeError("code allocation failed")
- await m.answer(f"Номер подтверждён. Ваш код: <b>{code}</b>\\n\\nКнопка запуска H1 RADAR закреплена внизу чата.",reply_markup=app_reply_kb(),parse_mode="HTML")
- await m.answer("🛰 Откройте карту прямо здесь, в Telegram:",reply_markup=app_kb())
- if role=="owner": await m.answer("Вам доступна панель владельца.")
+ code,fresh=await ensure_user(m.from_user)
+ greeting="Аккаунт H1 RADAR создан." if fresh else "С возвращением в H1 RADAR."
+ await m.answer(f"{greeting}\nВаш код: <b>{code}</b>\n\nКарта открывается в обычном браузере — без Telegram Mini App.",reply_markup=app_kb(),parse_mode="HTML")
 
 @dp.message(Command("radar"))
-async def radar(m:Message): await m.answer("Открыть карту H1 RADAR:",reply_markup=app_kb())
+async def radar(m:Message):
+ await ensure_user(m.from_user)
+ await m.answer("Открыть карту H1 RADAR:",reply_markup=app_kb())
 
 @dp.message(Command("moderation"))
 async def moderation(m:Message):
  row=await pool.fetchrow("SELECT role FROM users WHERE telegram_id=$1",m.from_user.id)
  if not row or row["role"] not in ("owner","moderator"):
   await m.answer("Панель доступна только владельцу и назначенным модераторам."); return
- kb=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Открыть модерацию",web_app=WebAppInfo(url=WEBAPP_URL+"?panel=moderation"))]])
- await m.answer("Панель управления H1 RADAR:",reply_markup=kb)
+ await m.answer("Панель управления H1 RADAR:",reply_markup=app_kb("/?panel=moderation"))
 
 @dp.message(Command("help"))
 async def help_cmd(m:Message):
- await m.answer("/start — регистрация\n/radar — открыть карту\n/moderation — панель модерации (для команды)")
+ await m.answer("/start — регистрация и вход\n/radar — открыть карту в браузере\n/moderation — панель модерации")
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -230,7 +216,7 @@ async def lifespan(app:FastAPI):
  bot=Bot(BOT_TOKEN)
  try:
   await configure_bot_profile(bot)
-  log.info("Telegram bot profile, commands and Mini App menu configured")
+  log.info("Telegram bot profile configured; reply keyboards and Mini App menu disabled")
  except Exception:
   log.exception("Could not configure Telegram bot profile/menu; polling will continue")
  polling_task=asyncio.create_task(dp.start_polling(bot,handle_signals=False))
@@ -240,7 +226,7 @@ async def lifespan(app:FastAPI):
  if pool: await pool.close()
 
 app=FastAPI(title="H1 RADAR API",version="1.0.0",lifespan=lifespan)
-app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL],allow_credentials=False,allow_methods=["GET","POST","DELETE"],allow_headers=["Authorization","Content-Type"])
+app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL,MAP_URL],allow_credentials=False,allow_methods=["GET","POST","DELETE"],allow_headers=["Authorization","Content-Type"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
