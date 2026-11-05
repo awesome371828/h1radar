@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#123e5a"/><stop offset=".55" stop-color="#0a2037"/><stop offset="1" stop-color="#06111f"/></linearGradient><linearGradient id="txt" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#d2fff1"/><stop offset="1" stop-color="#8bcdf4"/></linearGradient><radialGradient id="glow"><stop stop-color="#42c7b7" stop-opacity=".3"/><stop offset="1" stop-color="#42c7b7" stop-opacity="0"/></radialGradient></defs>
+<rect width="512" height="512" rx="110" fill="url(#bg)"/><circle cx="256" cy="244" r="250" fill="url(#glow)"/>
+<rect x="38" y="38" width="436" height="436" rx="100" fill="none" stroke="#83e6d7" stroke-opacity=".6" stroke-width="4"/>
+<circle cx="256" cy="244" r="176" fill="none" stroke="#7bded2" stroke-opacity=".22" stroke-width="3"/><circle cx="256" cy="244" r="142" fill="none" stroke="#7bded2" stroke-opacity=".15" stroke-width="2"/>
+<path d="M256 244 385 127" stroke="#9af3df" stroke-width="5" stroke-linecap="round"/><circle cx="385" cy="127" r="12" fill="#a9f5e4"/><circle cx="256" cy="244" r="9" fill="#a9f5e4"/>
+<text x="256" y="290" text-anchor="middle" font-family="Arial,sans-serif" font-size="162" font-weight="800" fill="url(#txt)" letter-spacing="-10">H1</text>
+<text x="256" y="394" text-anchor="middle" font-family="Arial,sans-serif" font-size="28" font-weight="700" fill="#8edbd7" letter-spacing="12">RADAR</text>
+</svg>
