@@ -394,8 +394,8 @@ async def public_overview():
    (SELECT count(*) FROM reports WHERE status='published' AND created_at>=now()-interval '24 hours') AS published_24h,
    (SELECT count(*) FROM city_chat_messages WHERE created_at>=now()-interval '24 hours') AS chat_24h,
    (SELECT count(*) FROM reports WHERE status='pending' AND created_at>=now()-interval '3 minutes') AS pending_recent""")
-  status=await c.fetchrow("""SELECT count(*) FILTER (WHERE last_seen_at>now()-interval '15 minutes') AS online,
-   max(created_at) AS last_report FROM reports WHERE status='published'""")
+  status=await c.fetchrow("""SELECT (SELECT count(*) FROM users WHERE last_seen_at>now()-interval '15 minutes') AS online,
+   (SELECT max(created_at) FROM reports WHERE status='published') AS last_report""")
  return {"ok":True,"updated_at":datetime.now(timezone.utc).isoformat(),
   "cities":int(row["cities"] or 0),"members":int(row["members"] or 0),
   "published_total":int(row["published_total"] or 0),"published_24h":int(row["published_24h"] or 0),
