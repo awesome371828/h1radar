@@ -40,7 +40,7 @@ def normalize_webapp_url(value: str | None) -> str:
  return urlunsplit(("https",parts.netloc,parts.path.rstrip("/"),parts.query,parts.fragment))
 
 WEBAPP_URL=normalize_webapp_url(os.getenv("WEBAPP_URL","https://map.h1radar.relaxdev.ru"))
-MAP_URL=os.getenv("MAP_URL","https://h1radar.relaxdev.ru").strip().rstrip("/")
+MAP_URL=os.getenv("MAP_URL","https://map.h1radar.relaxdev.ru").strip().rstrip("/")
 log.info("Public H1 RADAR map URL: %s", MAP_URL)
 DATABASE_URL=os.environ["DATABASE_URL"]
 BOT_USERNAME=os.getenv("BOT_USERNAME","").lstrip("@")
@@ -68,12 +68,19 @@ CREATE TABLE IF NOT EXISTS web_sessions(
 CREATE INDEX IF NOT EXISTS web_sessions_expiry_idx ON web_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS reports(
  id BIGSERIAL PRIMARY KEY, author_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,
- city TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('alert','all_clear','shelter','info')),
- description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending'
+ city TEXT NOT NULL, category TEXT NOT NULL CHECK(category IN ('alert','all_clear','shelter','info','drone','explosion','siren','rocket')),
+ description TEXT NOT NULL DEFAULT '', latitude DOUBLE PRECISION, longitude DOUBLE PRECISION,
+ confirmations INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending'
  CHECK(status IN ('pending','published','rejected')),
  moderator_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), reviewed_at TIMESTAMPTZ
 );
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS confirmations INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_category_check;
+ALTER TABLE reports ADD CONSTRAINT reports_category_check CHECK(category IN ('alert','all_clear','shelter','info','drone','explosion','siren','rocket'));
+CREATE TABLE IF NOT EXISTS report_confirmations(report_id BIGINT NOT NULL REFERENCES reports(id) ON DELETE CASCADE, telegram_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY(report_id,telegram_id));
 CREATE INDEX IF NOT EXISTS reports_feed_idx ON reports(status,created_at DESC);
 CREATE TABLE IF NOT EXISTS city_chat_messages(id BIGSERIAL PRIMARY KEY, city TEXT NOT NULL, telegram_id BIGINT REFERENCES users(telegram_id) ON DELETE SET NULL, username TEXT, display_name TEXT NOT NULL, message TEXT NOT NULL CHECK(length(message) BETWEEN 1 AND 1000), created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS city_chat_city_time_idx ON city_chat_messages(city,created_at DESC);
@@ -169,7 +176,7 @@ def user_json(r):
 
 def feed_json(r):
  return {"id":r["id"],"city":r["city"],"category":r["category"],
- "description":r["description"],"created_at":r["created_at"].isoformat()}
+ "description":r["description"],"latitude":r["latitude"] if "latitude" in r else None,"longitude":r["longitude"] if "longitude" in r else None,"confirmations":r["confirmations"] if "confirmations" in r else 1,"created_at":r["created_at"].isoformat()}
 
 def app_kb(path: str = ""):
  url=MAP_URL + (path if path.startswith("/") else ("/"+path if path else ""))
@@ -254,8 +261,10 @@ async def map_page():
 
 class ReportIn(BaseModel):
  city:str=Field(min_length=2,max_length=80)
- category:str=Field(pattern="^(alert|all_clear|shelter|info)$")
+ category:str=Field(pattern="^(alert|all_clear|shelter|info|drone|explosion|siren|rocket)$")
  description:str=Field(default="",max_length=500)
+ latitude:float|None=Field(default=None,ge=-90,le=90)
+ longitude:float|None=Field(default=None,ge=-180,le=180)
 
 @app.get("/privacy")
 async def privacy():
@@ -302,8 +311,8 @@ async def cities():
 @app.get("/api/feed")
 async def feed(city:str|None=None,limit:int=50):
  limit=max(1,min(limit,100))
- if city: rows=await pool.fetch("SELECT id,city,category,description,created_at FROM reports WHERE status='published' AND city=$1 ORDER BY created_at DESC LIMIT $2",city,limit)
- else: rows=await pool.fetch("SELECT id,city,category,description,created_at FROM reports WHERE status='published' ORDER BY created_at DESC LIMIT $1",limit)
+ if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' AND city=$1 ORDER BY created_at DESC LIMIT $2",city,limit)
+ else: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at FROM reports WHERE status='published' ORDER BY created_at DESC LIMIT $1",limit)
  return {"items":[feed_json(r) for r in rows]}
 
 @app.post("/api/reports")
@@ -312,8 +321,22 @@ async def create_report(body:ReportIn,authorization:str|None=Header(default=None
  city=body.city.strip(); desc=body.description.strip()
  if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
   raise HTTPException(400,"Выберите город из списка.")
- r=await pool.fetchrow("INSERT INTO reports(author_id,city,category,description) VALUES($1,$2,$3,$4) RETURNING id",u["telegram_id"],city,body.category,desc)
- return {"ok":True,"id":r["id"],"status":"pending","message":"Сообщение отправлено на проверку."}
+ r=await pool.fetchrow("INSERT INTO reports(author_id,city,category,description,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",u["telegram_id"],city,body.category,desc,round(body.latitude,2) if body.latitude is not None else None,round(body.longitude,2) if body.longitude is not None else None)
+ await pool.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",r["id"],u["telegram_id"])
+ return {"ok":True,"id":r["id"],"status":"pending","confirmations":1,"message":"Отметка сохранена. Она появится после подтверждений других пользователей или проверки модератором."}
+
+@app.post("/api/reports/{report_id}/confirm")
+async def confirm_report(report_id:int,authorization:str|None=Header(default=None)):
+ u=await current_user(authorization)
+ async with pool.acquire() as c:
+  async with c.transaction():
+   row=await c.fetchrow("SELECT id,status,author_id FROM reports WHERE id=$1 FOR UPDATE",report_id)
+   if not row or row["status"]!="pending": raise HTTPException(404,"Отметка не найдена или уже обработана.")
+   if row["author_id"]==u["telegram_id"]: raise HTTPException(400,"Нельзя подтверждать собственную отметку.")
+   await c.execute("INSERT INTO report_confirmations(report_id,telegram_id) VALUES($1,$2) ON CONFLICT DO NOTHING",report_id,u["telegram_id"])
+   count=await c.fetchval("SELECT count(*) FROM report_confirmations WHERE report_id=$1",report_id)
+   await c.execute("UPDATE reports SET confirmations=$2,status=CASE WHEN $2>=3 THEN 'published' ELSE status END,reviewed_at=CASE WHEN $2>=3 THEN now() ELSE reviewed_at END WHERE id=$1",report_id,count)
+ return {"ok":True,"confirmations":count,"published":count>=3}
 
 @app.get("/api/moderation/summary")
 async def mod_summary(authorization:str|None=Header(default=None)):
