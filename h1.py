@@ -6,7 +6,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 import asyncpg
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import (Message, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonDefault)
+from aiogram.types import (Message, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, MenuButtonWebApp, WebAppInfo)
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -268,7 +268,7 @@ def feed_json(r):
 
 def app_kb(path: str = ""):
  url=MAP_URL + (path if path.startswith("/") else ("/"+path if path else ""))
- return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛰 Открыть H1 RADAR",url=url)]])
+ return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🛰 Открыть карту H1 RADAR",url=url)],[InlineKeyboardButton(text="🔐 Войти на сайте",url=url)]])
 
 async def ensure_user(u):
  name=" ".join(x for x in [u.first_name,u.last_name] if x) or "Пользователь"
@@ -288,11 +288,11 @@ async def ensure_user(u):
 
 async def configure_bot_profile(b:Bot):
  await b.set_my_name("H1 RADAR")
- await b.set_my_description("H1 RADAR — гражданская карта и лента сообщений сообщества. Не является официальным источником экстренных оповещений.")
- await b.set_my_short_description("Гражданская карта и сообщения сообщества.")
+ await b.set_my_description("H1 RADAR — гражданская карта, сообщения и городские сообщества. Вход через Telegram.")
+ await b.set_my_short_description("Гражданская карта и городские сообщества.")
  await b.set_my_commands([BotCommand(command="start",description="Открыть H1 RADAR"),BotCommand(command="help",description="Помощь")])
- # Убираем прежнюю кнопку Mini App из меню Telegram.
- await b.set_chat_menu_button(menu_button=MenuButtonDefault())
+ # Показываем постоянную кнопку открытия карты в меню Telegram.
+ await b.set_chat_menu_button(menu_button=MenuButtonWebApp(text="Открыть H1 RADAR",web_app=WebAppInfo(url=MAP_URL)))
 
 @dp.message(CommandStart())
 async def start(m:Message):
@@ -302,14 +302,14 @@ async def start(m:Message):
   nonce=payload[1][6:]
   valid=await pool.fetchval("UPDATE login_challenges SET telegram_id=$2 WHERE nonce=$1 AND expires_at>now() AND consumed_at IS NULL RETURNING nonce",nonce,m.from_user.id)
   if valid:
-   await m.answer("Вход подтверждён. Возвращайтесь во вкладку браузера — сайт завершит авторизацию автоматически.",reply_markup=app_kb())
+   await m.answer("✅ <b>Вход подтверждён</b>\n\nВозвращайся на страницу H1 RADAR. Карта откроется автоматически.",reply_markup=app_kb(),parse_mode="HTML")
    return
  greeting="Аккаунт H1 RADAR создан." if fresh else "С возвращением в H1 RADAR."
- await m.answer(f"{greeting}\nВаш код: <b>{code}</b>\n\nКарта открывается в обычном браузере — без Telegram Mini App.",reply_markup=app_kb(),parse_mode="HTML")
+ await m.answer(f"🛰 <b>H1 RADAR</b>\n\n{greeting}\nВаш персональный код: <code>{code}</code>\n\nДля просмотра карты войди через Telegram на странице проекта. После входа карта и городские разделы станут доступны.\n\n<i>H1 RADAR — гражданская платформа, не официальный источник экстренных оповещений.</i>",reply_markup=app_kb(),parse_mode="HTML")
 
 @dp.message(Command("help"))
 async def help_cmd(m:Message):
- await m.answer("/start — открыть H1 RADAR и войти\n/help — помощь по входу и использованию карты")
+ await m.answer("🛰 <b>H1 RADAR — помощь</b>\n\n/start — создать аккаунт или открыть карту\n\nЧтобы войти на сайт:\n1. Открой страницу карты.\n2. Нажми «Войти через Telegram».\n3. Перейди в этого бота и нажми Start.\n4. Вернись на страницу — доступ включится автоматически.\n\nКоманда /start также показывает твой персональный код.",reply_markup=app_kb(),parse_mode="HTML")
 
 async def expire_pending_reports():
  while True:
@@ -328,7 +328,7 @@ async def expire_pending_reports():
 @asynccontextmanager
 async def lifespan(app:FastAPI):
  global pool,bot,polling_task,cleanup_task
- pool=await asyncpg.create_pool(DATABASE_URL,min_size=1,max_size=int(os.getenv("DB_POOL_SIZE","10")),command_timeout=8,ssl=False,statement_cache_size=0)
+ pool=await asyncpg.create_pool(DATABASE_URL,min_size=2,max_size=int(os.getenv("DB_POOL_SIZE","12")),command_timeout=15,ssl=False,statement_cache_size=0,max_inactive_connection_lifetime=300)
  async with pool.acquire() as c: await c.execute(SCHEMA)
  bot=Bot(BOT_TOKEN)
  try:
@@ -350,7 +350,7 @@ async def lifespan(app:FastAPI):
  if pool: await pool.close()
 
 app=FastAPI(title="H1 RADAR API",version="1.0.0",lifespan=lifespan)
-app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL,MAP_URL],allow_credentials=False,allow_methods=["GET","POST","DELETE"],allow_headers=["Authorization","Content-Type"])
+app.add_middleware(CORSMiddleware,allow_origins=[WEBAPP_URL,MAP_URL],allow_credentials=False,allow_methods=["GET","POST","PATCH","DELETE"],allow_headers=["Authorization","Content-Type"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
@@ -447,13 +447,20 @@ async def me(authorization:str|None=Header(default=None)):
  """,r["telegram_id"])
  return {"user":user_json(r),"stats":{k:int(stats[k] or 0) for k in ("reports_total","reports_published","confirmations_given","chat_messages")}}
 
+@app.get("/api/public/cities")
+async def public_cities():
+ rows=await pool.fetch("SELECT id,name,region FROM cities WHERE enabled=true ORDER BY name")
+ return {"cities":[dict(r) for r in rows]}
+
 @app.get("/api/cities")
-async def cities():
+async def cities(authorization:str|None=Header(default=None)):
+ await current_user(authorization)
  rows=await pool.fetch("SELECT id,name,region,latitude,longitude FROM cities WHERE enabled=true ORDER BY name")
  return {"cities":[dict(r) for r in rows]}
 
 @app.get("/api/feed")
-async def feed(city:str|None=None,limit:int=50,hours:int=24):
+async def feed(city:str|None=None,limit:int=50,hours:int=24,authorization:str|None=Header(default=None)):
+ await current_user(authorization)
  limit=max(1,min(limit,100)); hours=max(1,min(hours,720))
  # Pending marks are visible to everyone for their three-minute confirmation window.
  if city: rows=await pool.fetch("SELECT id,city,category,description,latitude,longitude,confirmations,created_at,status FROM reports WHERE status IN ('published','pending') AND (status='published' OR created_at>=now()-interval '3 minutes') AND city=$1 AND created_at>=now()-make_interval(hours=>$2) ORDER BY created_at DESC LIMIT $3",city,hours,limit)
@@ -583,7 +590,8 @@ async def set_role(telegram_id:int,role:str,authorization:str|None=Header(defaul
  return {"ok":True,"role":role}
 
 @app.get("/api/city-chat")
-async def city_chat(city:str,after:int=0):
+async def city_chat(city:str,after:int=0,authorization:str|None=Header(default=None)):
+ await current_user(authorization)
  if not await pool.fetchval("SELECT EXISTS(SELECT 1 FROM cities WHERE name=$1 AND enabled=true)",city):
   raise HTTPException(400,"Неизвестный город.")
  rows=await pool.fetch("SELECT id,username,display_name,message,created_at FROM city_chat_messages WHERE city=$1 AND id>$2 ORDER BY id DESC LIMIT 100",city,after)
